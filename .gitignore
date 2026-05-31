@@ -1,0 +1,27 @@
+# 환경변수 (절대 올리면 안됨)
+.env
+
+# PEM 키 (절대 올리면 안됨)
+*.pem
+
+# 쿠키 및 로그 (개인정보 포함)
+tistory_cookies.json
+
+# 런타임 데이터
+daily_log.json
+
+# 디버그 스크린샷
+*.png
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Claude Code 로컬 설정
+.claude/
+
+# 에디터
+.vscode/
+.idea/
