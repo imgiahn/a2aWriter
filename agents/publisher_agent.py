@@ -88,7 +88,22 @@ def auto_login(page: Page) -> bool:
         page.wait_for_load_state("networkidle", timeout=15000)
         page.wait_for_timeout(2000)
 
-        # 3. 로그인 성공 확인 (tistory.com 으로 리다이렉트)
+        # 3. 이메일 인증 대기 (새 기기 첫 로그인 시 카카오가 인증 요구)
+        if "verifyTms" in page.url or "verify" in page.url.lower():
+            print("  📧 카카오 이메일 인증 요청됨. 메일함에서 [로그인 승인] 클릭 후 자동 재시도...")
+            for i in range(24):  # 최대 2분 대기 (5초 x 24)
+                page.wait_for_timeout(5000)
+                if "verifyTms" not in page.url and "verify" not in page.url.lower():
+                    break
+                try:
+                    page.wait_for_url("**/tistory.com/**", timeout=3000)
+                    break
+                except Exception:
+                    pass
+                if i % 6 == 5:
+                    print(f"  ⏳ 인증 대기 중... ({(i+1)*5}초)")
+
+        # 4. 최종 로그인 확인
         page.goto(f"{BLOG_URL}/manage", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
         success = "/manage" in page.url and "login" not in page.url
