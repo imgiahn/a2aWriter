@@ -12,7 +12,6 @@ Planner Agent
 """
 
 import os
-import json
 from datetime import date
 from pathlib import Path
 from dotenv import load_dotenv
@@ -31,9 +30,8 @@ def load_memory() -> dict:
     }
 
 
-def load_posted_combos() -> list:
-    f = Path("posted_combos.json")
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+def count_published() -> int:
+    return len(list(Path("tasks/published").glob("*.md")))
 
 
 def get_next_task_id() -> str:
@@ -75,12 +73,14 @@ def run():
     편집장이 승인한 주제 목록을 아래에 직접 입력하면 Task를 생성한다.
     """
     memory = load_memory()
-    posted = load_posted_combos()
+
+    published = count_published()
+    planned   = len(list(TASKS_PLANNED.glob("*.md")))
 
     print("=" * 50)
     print("Planner Agent")
     print("=" * 50)
-    print(f"발행 완료: {len(posted)}개")
+    print(f"발행 완료: {published}개 | 대기 중: {planned}개")
     print()
 
     # ── 편집장 승인 후 여기에 주제 추가 ──────────────────
