@@ -589,9 +589,8 @@ DESK_TEMPLATE = r"""<!DOCTYPE html>
 <title>a2aWriter 편집국</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;700&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -599,7 +598,7 @@ body {
   min-height: 100vh;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Black Han Sans', 'Noto Sans KR', sans-serif;
   color: #e2e8f0;
   overflow: hidden;
 }
@@ -626,20 +625,20 @@ header {
   padding: 16px 24px 8px;
 }
 .logo {
-  font-size: 11px;
+  font-size: 22px;
   color: #a78bfa;
   text-shadow: 0 0 12px #7c3aed, 0 0 24px #7c3aed;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 .back-btn {
   margin-left: auto;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 9px;
+  font-family: 'Black Han Sans', 'Noto Sans KR', sans-serif;
+  font-size: 15px;
   background: transparent;
   color: #475569;
   border: 1px solid #1e293b;
   border-radius: 4px;
-  padding: 6px 12px;
+  padding: 7px 16px;
   cursor: pointer;
   text-decoration: none;
   transition: all .2s;
@@ -660,10 +659,10 @@ canvas {
 }
 
 .hint {
-  font-size: 7px;
+  font-size: 13px;
   color: #1e293b;
   margin-top: 10px;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
 }
 
 /* ── Dialog ── */
@@ -719,15 +718,15 @@ canvas {
 }
 .dialog-info { flex: 1; }
 .dialog-name {
-  font-size: 13px;
-  margin-bottom: 6px;
-  line-height: 1.6;
+  font-size: 20px;
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 .dialog-name.planner { color: #a78bfa; text-shadow: 0 0 8px #7c3aed; }
 .dialog-name.writer  { color: #6ee7b7; text-shadow: 0 0 8px #10b981; }
 .dialog-desc {
   font-family: 'Noto Sans KR', sans-serif;
-  font-size: 12px; color: #64748b;
+  font-size: 14px; color: #64748b;
   line-height: 1.6;
 }
 
@@ -743,21 +742,21 @@ canvas {
   text-align: center;
 }
 .stat-box .s-label {
-  font-size: 6px; color: #475569;
-  text-transform: uppercase; letter-spacing: 1px;
+  font-size: 11px; color: #475569;
+  letter-spacing: 1px;
   margin-bottom: 6px; display: block;
 }
 .stat-box .s-val {
-  font-size: 20px; color: #e2e8f0;
+  font-size: 28px; color: #e2e8f0;
   display: block;
 }
 
 .dialog-actions { display: flex; gap: 10px; }
 .action-btn {
   flex: 1;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 9px;
-  padding: 12px 10px;
+  font-family: 'Black Han Sans', 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  padding: 14px 12px;
   border: none; border-radius: 3px;
   cursor: pointer;
   transition: all .15s;
@@ -794,7 +793,7 @@ canvas {
   border-radius: 3px;
   padding: 12px;
   font-family: 'Noto Sans KR', sans-serif;
-  font-size: 11px; color: #64748b;
+  font-size: 13px; color: #64748b;
   max-height: 100px; overflow-y: auto;
   white-space: pre-wrap;
   line-height: 1.6;
@@ -822,12 +821,12 @@ canvas {
 
 <header>
   <span class="logo">a2aWriter</span>
-  <span style="color:#1e293b;font-size:9px;font-family:'Press Start 2P',monospace;">EDITORIAL OFFICE</span>
-  <a href="/" class="back-btn">← DASHBOARD</a>
+  <span style="color:#1e293b;font-size:14px;font-family:'Black Han Sans',sans-serif;">편집국</span>
+  <a href="/" class="back-btn">← 대시보드</a>
 </header>
 
 <canvas id="c" width="960" height="480"></canvas>
-<p class="hint">▲ CLICK CHARACTER TO INTERACT ▲</p>
+<p class="hint">▲ 캐릭터를 클릭하면 대화할 수 있어요 ▲</p>
 
 <!-- Dialog -->
 <div class="dialog-overlay" id="overlay" onclick="closeDialog(event)">
@@ -988,15 +987,15 @@ function drawBg(t) {
 
   // ── 왼쪽 방 (기획) ──────────────────────────────────
 
-  // 네온 사인 - PLANNER
+  // 네온 사인 - 기획실
   ctx.save();
   ctx.shadowColor = C.neonP;
-  ctx.shadowBlur  = 14;
+  ctx.shadowBlur  = 16;
   ctx.fillStyle   = C.neonP;
-  ctx.font        = 'bold 10px "Press Start 2P"';
+  ctx.font        = 'bold 14px "Black Han Sans"';
   ctx.textAlign   = 'left';
-  ctx.globalAlpha = 0.6 + Math.sin(t * 0.002) * 0.2;
-  ctx.fillText('PLANNER', 8 * S, 8 * S);
+  ctx.globalAlpha = 0.7 + Math.sin(t * 0.002) * 0.2;
+  ctx.fillText('✦ 기획실', 8 * S, 8 * S);
   ctx.restore();
 
   // 창문
@@ -1019,11 +1018,11 @@ function drawBg(t) {
   ctx.fillStyle = '#1e3a5f';
   for (let i = 0; i < 5; i++) rect(43, 17 + i * 4, 22 + (i % 3) * 8, 1, '#253d5a');
   ctx.save();
-  ctx.fillStyle = '#6366f1';
-  ctx.font = 'bold 5px "Press Start 2P"';
+  ctx.fillStyle = '#818cf8';
+  ctx.font = 'bold 8px "Black Han Sans"';
   ctx.shadowColor = '#6366f1';
-  ctx.shadowBlur = 6;
-  ctx.fillText('PLAN', 43 * S, 17 * S);
+  ctx.shadowBlur = 8;
+  ctx.fillText('기획안', 43 * S, 18 * S);
   ctx.restore();
 
   // 책상 (왼쪽)
@@ -1059,15 +1058,15 @@ function drawBg(t) {
 
   // ── 오른쪽 방 (작가) ────────────────────────────────
 
-  // 네온 사인 - WRITER
+  // 네온 사인 - 작가실
   ctx.save();
   ctx.shadowColor = C.neonG;
-  ctx.shadowBlur  = 14;
+  ctx.shadowBlur  = 16;
   ctx.fillStyle   = C.neonG;
-  ctx.font        = 'bold 10px "Press Start 2P"';
+  ctx.font        = 'bold 14px "Black Han Sans"';
   ctx.textAlign   = 'left';
-  ctx.globalAlpha = 0.6 + Math.cos(t * 0.002) * 0.2;
-  ctx.fillText('WRITER', 130 * S, 8 * S);
+  ctx.globalAlpha = 0.7 + Math.cos(t * 0.002) * 0.2;
+  ctx.fillText('✦ 작가실', 130 * S, 8 * S);
   ctx.restore();
 
   // 책장
@@ -1104,9 +1103,9 @@ function drawBg(t) {
   glow(196, GH - 32, 14, 10, C.neonG, 18);
   ctx.save();
   ctx.fillStyle = '#34d399';
-  ctx.font = 'bold 4px "Press Start 2P"';
+  ctx.font = 'bold 8px "Black Han Sans"';
   ctx.shadowColor = '#34d399'; ctx.shadowBlur = 8;
-  ctx.fillText('WRITING', 197 * S, (GH - 26) * S);
+  ctx.fillText('작성중', 197 * S, (GH - 26) * S);
   ctx.restore();
   rect(202, GH - 21, 4, 1, C.monitor); // 받침대
 
@@ -1124,24 +1123,22 @@ function drawBg(t) {
   rect(0, GH - 6, GW, 1, '#111825');
 
   ctx.save();
-  ctx.font = '5px "Press Start 2P"';
+  ctx.font = 'bold 9px "Black Han Sans"';
   ctx.textAlign = 'left';
-  // 상태 텍스트
   const st = status;
   const items = [
-    { label: 'PLANNED', val: st.planned,   color: C.neonP },
-    { label: 'DONE',    val: st.published, color: C.neonG },
-    { label: 'WRITING', val: st.writing,   color: C.neonY },
-    { label: 'IDEAS',   val: st.suggestions, color: C.neonR },
+    { label: '대기', val: st.planned,     color: C.neonP },
+    { label: '발행', val: st.published,   color: C.neonG },
+    { label: '작성중', val: st.writing,   color: C.neonY },
+    { label: '제안', val: st.suggestions, color: C.neonR },
   ];
   items.forEach((it, i) => {
     ctx.fillStyle = it.color;
-    ctx.shadowColor = it.color; ctx.shadowBlur = 6;
-    ctx.fillText(`${it.label}:${it.val}`, (4 + i * 58) * S, (GH - 1) * S);
+    ctx.shadowColor = it.color; ctx.shadowBlur = 8;
+    ctx.fillText(`${it.label} ${it.val}`, (4 + i * 58) * S, (GH - 1) * S);
   });
-  // 시계
   ctx.textAlign = 'right';
-  ctx.fillStyle = '#1e293b';
+  ctx.fillStyle = '#334155';
   ctx.shadowBlur = 0;
   ctx.fillText(new Date().toLocaleTimeString('ko-KR'), (GW - 2) * S, (GH - 1) * S);
   ctx.restore();
@@ -1151,9 +1148,9 @@ function drawBg(t) {
 function drawBadge(gx, gy, name, color) {
   ctx.save();
   ctx.shadowColor = color;
-  ctx.shadowBlur  = 10;
+  ctx.shadowBlur  = 14;
   ctx.fillStyle   = color;
-  ctx.font        = '6px "Press Start 2P"';
+  ctx.font        = 'bold 11px "Black Han Sans"';
   ctx.textAlign   = 'center';
   ctx.fillText(name, (gx + 5) * S, (gy - 3) * S);
   ctx.restore();
@@ -1162,12 +1159,12 @@ function drawBadge(gx, gy, name, color) {
 // ── 에이전트 상태 ─────────────────────────────────
 const agents = [
   {
-    id: 'planner', name: 'PLANNER', color: C.neonP,
+    id: 'planner', name: '기획자', color: C.neonP,
     x: 42, y: GH - 26, vx: 0.25, frame: 0, ftimer: 0,
     patrol: [12, 106], facingL: false, bob: 0,
   },
   {
-    id: 'writer', name: 'WRITER', color: C.neonG,
+    id: 'writer', name: '작가', color: C.neonG,
     x: 195, y: GH - 26, vx: -0.3, frame: 0, ftimer: 0,
     patrol: [125, 228], facingL: true, bob: 0,
   },
@@ -1243,31 +1240,31 @@ function openDialog(agent) {
 
   if (agent.id === 'planner') {
     document.getElementById('d-name').className  = 'dialog-name planner';
-    document.getElementById('d-name').textContent = 'PLANNER AGENT';
+    document.getElementById('d-name').textContent = '🧠 기획 에이전트';
     document.getElementById('d-desc').textContent = `대기 중 · AI 제안 ${status.suggestions}개 준비됨`;
     document.getElementById('d-stats').innerHTML = `
-      <div class="stat-box"><span class="s-label">PLANNED</span><span class="s-val" style="color:#a78bfa">${status.planned}</span></div>
-      <div class="stat-box"><span class="s-label">PUBLISHED</span><span class="s-val" style="color:#34d399">${status.published}</span></div>
-      <div class="stat-box"><span class="s-label">SUGGEST</span><span class="s-val" style="color:#f43f5e">${status.suggestions}</span></div>
-      <div class="stat-box"><span class="s-label">FAILED</span><span class="s-val" style="color:#fb923c">${status.failed}</span></div>
+      <div class="stat-box"><span class="s-label">대기 소재</span><span class="s-val" style="color:#a78bfa">${status.planned}</span></div>
+      <div class="stat-box"><span class="s-label">발행 완료</span><span class="s-val" style="color:#34d399">${status.published}</span></div>
+      <div class="stat-box"><span class="s-label">AI 제안</span><span class="s-val" style="color:#f43f5e">${status.suggestions}</span></div>
+      <div class="stat-box"><span class="s-label">실패</span><span class="s-val" style="color:#fb923c">${status.failed}</span></div>
     `;
     document.getElementById('d-actions').innerHTML = `
-      <button class="action-btn btn-indigo" onclick="runAction('suggest')">✨ 새 주제 기획 (5개)</button>
-      <button class="action-btn btn-ghost"  onclick="closeDialog()">ESC</button>
+      <button class="action-btn btn-indigo" onclick="runAction('suggest')">✨ 새 주제 기획하기 (5개)</button>
+      <button class="action-btn btn-ghost"  onclick="closeDialog()">닫기</button>
     `;
   } else {
     document.getElementById('d-name').className  = 'dialog-name writer';
-    document.getElementById('d-name').textContent = 'WRITER AGENT';
+    document.getElementById('d-name').textContent = '✍️ 작가 에이전트';
     document.getElementById('d-desc').textContent = `대기 중 · 발행 완료 ${status.published}개`;
     document.getElementById('d-stats').innerHTML = `
-      <div class="stat-box"><span class="s-label">PLANNED</span><span class="s-val" style="color:#a78bfa">${status.planned}</span></div>
-      <div class="stat-box"><span class="s-label">PUBLISHED</span><span class="s-val" style="color:#34d399">${status.published}</span></div>
-      <div class="stat-box"><span class="s-label">WRITING</span><span class="s-val" style="color:#fbbf24">${status.writing}</span></div>
-      <div class="stat-box"><span class="s-label">FAILED</span><span class="s-val" style="color:#fb923c">${status.failed}</span></div>
+      <div class="stat-box"><span class="s-label">대기 소재</span><span class="s-val" style="color:#a78bfa">${status.planned}</span></div>
+      <div class="stat-box"><span class="s-label">발행 완료</span><span class="s-val" style="color:#34d399">${status.published}</span></div>
+      <div class="stat-box"><span class="s-label">작성 중</span><span class="s-val" style="color:#fbbf24">${status.writing}</span></div>
+      <div class="stat-box"><span class="s-label">실패</span><span class="s-val" style="color:#fb923c">${status.failed}</span></div>
     `;
     document.getElementById('d-actions').innerHTML = `
-      <button class="action-btn btn-green" onclick="runAction('write_publish')">📝 글 쓰고 발행하기</button>
-      <button class="action-btn btn-ghost" onclick="closeDialog()">ESC</button>
+      <button class="action-btn btn-green" onclick="runAction('write_publish')">📝 지금 글 쓰고 발행하기</button>
+      <button class="action-btn btn-ghost" onclick="closeDialog()">닫기</button>
     `;
   }
   document.getElementById('overlay').classList.add('open');
