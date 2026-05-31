@@ -26,6 +26,10 @@ __pycache__/
 venv/
 .venv/
 
+# 로컬 전용 스크립트 (서버에서 불필요)
+setup_browser.py
+debug_login.py
+
 # Claude Code 로컬 설정
 .claude/
 
