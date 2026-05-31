@@ -75,26 +75,20 @@ def auto_login(page: Page) -> bool:
         return False
 
     try:
+        # 1. 티스토리 로그인 페이지 → 카카오 버튼 클릭
         page.goto("https://www.tistory.com/auth/login", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
-
-        # 카카오 로그인 버튼 클릭
-        page.locator("a.btn_login.kakao_account, a[href*='kakao']").first.click()
-        page.wait_for_load_state("networkidle", timeout=10000)
-
-        # 카카오 계정 입력 폼
-        page.locator("input[name='loginId'], #loginId").fill(email)
-        page.locator("input[name='password'], #password").fill(password)
-        page.locator("button[type='submit'], .btn_g.btn_confirm").first.click()
+        page.locator("a.link_kakao_id").click()
         page.wait_for_load_state("networkidle", timeout=15000)
 
-        # 로그인 성공 확인
-        if "tistory.com" in page.url and "login" not in page.url:
-            print("  ✅ 자동 로그인 성공")
-            return True
+        # 2. 카카오 계정 입력
+        page.locator("input[name='loginId']").fill(email)
+        page.locator("input[name='password']").fill(password)
+        page.locator("button[type='submit']").click()
+        page.wait_for_load_state("networkidle", timeout=15000)
+        page.wait_for_timeout(2000)
 
-        # 추가 인증 페이지가 있을 경우 대기
-        page.wait_for_timeout(3000)
+        # 3. 로그인 성공 확인 (tistory.com 으로 리다이렉트)
         page.goto(f"{BLOG_URL}/manage", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
         success = "/manage" in page.url and "login" not in page.url
