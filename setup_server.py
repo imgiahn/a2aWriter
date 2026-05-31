@@ -55,22 +55,45 @@ def run():
             page.wait_for_url("**/tistory.com/**", timeout=10000)
             print("이메일 인증 없이 로그인 성공!")
         except Exception:
+            # 현재 URL과 스크린샷 저장
+            print(f"현재 URL: {page.url}")
+            page.screenshot(path="debug_step1.png")
+            print("스크린샷 저장: debug_step1.png")
+
             print()
             print("=" * 50)
-            print(f"  이메일 인증 필요!")
-            print(f"  {KAKAO_EMAIL} 메일함에서")
-            print(f"  [로그인 승인] 버튼을 클릭해주세요.")
+            print(f"  카카오 인증 필요!")
+            print(f"  폰 카카오 앱에서 [로그인 승인]을 눌러주세요.")
             print(f"  최대 3분 대기합니다...")
             print("=" * 50)
             print()
 
-            try:
-                page.wait_for_url("**/tistory.com/**", timeout=180000)
-                print("이메일 인증 완료!")
-            except Exception:
-                print("시간 초과. 다시 실행해주세요.")
+            # 10초마다 URL 출력하며 대기
+            import time
+            deadline = time.time() + 180
+            success = False
+            while time.time() < deadline:
+                current_url = page.url
+                print(f"  대기 중... URL: {current_url}")
+                if "tistory.com" in current_url and "kakao" not in current_url:
+                    success = True
+                    break
+                # 버튼이 있으면 클릭 시도 (확인, 계속, 동의 등)
+                for btn_text in ["확인", "계속", "동의", "허용"]:
+                    btn = page.locator(f"button:has-text('{btn_text}')").first
+                    if btn.is_visible():
+                        print(f"  '{btn_text}' 버튼 감지 → 클릭!")
+                        btn.click()
+                        break
+                page.wait_for_timeout(3000)
+
+            if not success:
+                page.screenshot(path="debug_timeout.png")
+                print(f"시간 초과. 마지막 URL: {page.url}")
+                print("스크린샷 저장: debug_timeout.png")
                 context.close()
                 return
+            print("인증 완료!")
 
         # 로그인 확인
         page.goto(f"{BLOG_URL}/manage", timeout=15000)
