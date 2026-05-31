@@ -66,6 +66,46 @@ def is_logged_in(page: Page) -> bool:
     return "/manage" in page.url and "login" not in page.url
 
 
+def auto_login(page: Page) -> bool:
+    """카카오 계정으로 헤드리스 자동 로그인. 성공 시 True 반환."""
+    email    = os.getenv("KAKAO_EMAIL", "")
+    password = os.getenv("KAKAO_PASSWORD", "")
+    if not email or not password:
+        print("  ⚠️  KAKAO_EMAIL / KAKAO_PASSWORD 환경변수가 없습니다.")
+        return False
+
+    try:
+        page.goto("https://www.tistory.com/auth/login", timeout=15000)
+        page.wait_for_load_state("networkidle", timeout=10000)
+
+        # 카카오 로그인 버튼 클릭
+        page.locator("a.btn_login.kakao_account, a[href*='kakao']").first.click()
+        page.wait_for_load_state("networkidle", timeout=10000)
+
+        # 카카오 계정 입력 폼
+        page.locator("input[name='loginId'], #loginId").fill(email)
+        page.locator("input[name='password'], #password").fill(password)
+        page.locator("button[type='submit'], .btn_g.btn_confirm").first.click()
+        page.wait_for_load_state("networkidle", timeout=15000)
+
+        # 로그인 성공 확인
+        if "tistory.com" in page.url and "login" not in page.url:
+            print("  ✅ 자동 로그인 성공")
+            return True
+
+        # 추가 인증 페이지가 있을 경우 대기
+        page.wait_for_timeout(3000)
+        page.goto(f"{BLOG_URL}/manage", timeout=15000)
+        page.wait_for_load_state("networkidle", timeout=10000)
+        success = "/manage" in page.url and "login" not in page.url
+        print(f"  {'✅ 자동 로그인 성공' if success else '❌ 자동 로그인 실패'}")
+        return success
+
+    except Exception as e:
+        print(f"  ❌ 자동 로그인 오류: {e}")
+        return False
+
+
 def manual_login(page: Page):
     print("\n⚠️  로그인이 필요합니다.")
     print("   브라우저에서 로그인 후 Enter를 눌러주세요...")
@@ -167,17 +207,27 @@ def run():
         load_cookies(context)
 
         if not is_logged_in(page):
-            browser.close()
-            if server_mode:
-                print("❌ 쿠키 만료. 로컬에서 tistory_cookies.json 갱신 후 재업로드하세요.")
+            print("  쿠키 만료 → 자동 로그인 시도...")
+            logged_in = auto_login(page)
+
+            if not logged_in and not server_mode:
+                # 로컬에서만 수동 로그인 폴백
+                browser.close()
+                COOKIES_FILE.unlink(missing_ok=True)
+                browser = pw.chromium.launch(headless=False)
+                context = browser.new_context()
+                page    = context.new_page()
+                manual_login(page)
+                logged_in = True
+
+            if not logged_in:
+                print("❌ 로그인 실패. KAKAO_EMAIL / KAKAO_PASSWORD 를 .env에서 확인하세요.")
+                browser.close()
                 shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
                 return
-            COOKIES_FILE.unlink(missing_ok=True)
-            browser = pw.chromium.launch(headless=False)
-            context = browser.new_context()
-            page    = context.new_page()
-            manual_login(page)
+
             save_cookies(context)
+            print("  쿠키 갱신 완료")
 
         try:
             post_article(page, title, html)
