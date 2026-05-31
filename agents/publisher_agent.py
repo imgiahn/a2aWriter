@@ -26,6 +26,7 @@ TASKS_PUBLISHED  = Path("tasks/published")
 TASKS_FAILED     = Path("tasks/failed")
 ARTICLES_DRAFT   = Path("articles/draft")
 ARTICLES_PUB     = Path("articles/published")
+ARTICLES_SUMMARY = Path("articles/summary")
 BROWSER_DATA_DIR = Path("browser_data")
 
 BLOG_NAME = "mbtireallove"
@@ -82,6 +83,16 @@ def auto_login(page: Page) -> bool:
     except Exception as e:
         print(f"  ❌ 자동 로그인 오류: {e}")
         return False
+
+
+def save_summary(task_id: str, html: str):
+    """발행 후 HTML에서 텍스트를 추출해 요약 저장."""
+    ARTICLES_SUMMARY.mkdir(exist_ok=True)
+    text = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    preview = text[:500] + ("..." if len(text) > 500 else "")
+    (ARTICLES_SUMMARY / f"{task_id}.txt").write_text(preview, encoding="utf-8")
 
 
 def reauth(pw) -> Optional[BrowserContext]:
@@ -260,6 +271,7 @@ def run():
             shutil.move(str(task_file), str(TASKS_PUBLISHED / task_file.name))
             draft = ARTICLES_DRAFT / f"{task_id}.html"
             shutil.copy(str(draft), str(ARTICLES_PUB / f"{task_id}.html"))
+            save_summary(task_id, html)
             print(f"✅ 발행 완료 → tasks/published/")
         except Exception as e:
             shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
