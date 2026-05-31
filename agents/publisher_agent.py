@@ -12,6 +12,7 @@ Publisher Agent
 import os
 import re
 import sys
+import time
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -25,7 +26,7 @@ TASKS_PUBLISHED  = Path("tasks/published")
 TASKS_FAILED     = Path("tasks/failed")
 ARTICLES_DRAFT   = Path("articles/draft")
 ARTICLES_PUB     = Path("articles/published")
-BROWSER_DATA_DIR = Path("browser_data")  # 카카오 기기 인증 쿠키 영구 저장
+BROWSER_DATA_DIR = Path("browser_data")
 
 BLOG_NAME = "mbtireallove"
 BLOG_URL  = f"https://{BLOG_NAME}.tistory.com"
@@ -52,7 +53,7 @@ def is_logged_in(page: Page) -> bool:
 
 
 def auto_login(page: Page) -> bool:
-    """카카오 계정으로 자동 로그인. persistent context 덕분에 기기 인증은 최초 1회만 필요."""
+    """저장된 쿠키로 카카오 로그인 시도."""
     email    = os.getenv("KAKAO_EMAIL", "")
     password = os.getenv("KAKAO_PASSWORD", "")
     if not email or not password:
@@ -60,13 +61,11 @@ def auto_login(page: Page) -> bool:
         return False
 
     try:
-        # 1. 티스토리 로그인 페이지 → 카카오 버튼 클릭
         page.goto("https://www.tistory.com/auth/login", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
         page.locator("a.link_kakao_id").click()
         page.wait_for_load_state("networkidle", timeout=15000)
 
-        # 2. 카카오 계정 입력 (저장된 기기 쿠키가 있으면 바로 통과)
         if "accounts.kakao.com" in page.url:
             page.locator("input[name='loginId']").fill(email)
             page.locator("input[name='password']").fill(password)
@@ -74,27 +73,80 @@ def auto_login(page: Page) -> bool:
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(2000)
 
-        # 3. 이메일 인증 대기 (기기 쿠키 없을 때만 발생, 최초 1회)
-        if "verifyTms" in page.url or ("accounts.kakao.com" in page.url and "login" in page.url):
-            print("  📧 카카오 이메일 인증 요청됨 (최초 1회)")
-            print("  ⏳ 메일함에서 [로그인 승인] 클릭 후 대기 중... (최대 3분)")
-            try:
-                page.wait_for_url("**/tistory.com/**", timeout=180000)
-                print("  ✅ 인증 완료")
-            except Exception:
-                # wait_for_url가 못 잡을 경우 manage 페이지로 이동해 확인
-                pass
-
-        # 4. 최종 로그인 확인
         page.goto(f"{BLOG_URL}/manage", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
         success = "/manage" in page.url and "login" not in page.url
-        print(f"  {'✅ 자동 로그인 성공' if success else '❌ 자동 로그인 실패'}")
+        print(f"  {'✅ 자동 로그인 성공' if success else '❌ 쿠키 만료 → 재인증 필요'}")
         return success
 
     except Exception as e:
         print(f"  ❌ 자동 로그인 오류: {e}")
         return False
+
+
+def reauth(pw) -> Optional[BrowserContext]:
+    """쿠키 만료 시 headless 재인증. 폰 카카오 앱 승인 필요."""
+    email    = os.getenv("KAKAO_EMAIL", "")
+    password = os.getenv("KAKAO_PASSWORD", "")
+
+    if BROWSER_DATA_DIR.exists():
+        shutil.rmtree(BROWSER_DATA_DIR)
+    BROWSER_DATA_DIR.mkdir()
+
+    context = pw.chromium.launch_persistent_context(
+        user_data_dir=str(BROWSER_DATA_DIR),
+        headless=True,
+    )
+    page = context.new_page()
+
+    try:
+        page.goto("https://www.tistory.com/auth/login", timeout=15000)
+        page.wait_for_load_state("networkidle")
+        page.locator("a.link_kakao_id").click()
+        page.wait_for_load_state("networkidle")
+
+        if "accounts.kakao.com" in page.url:
+            page.locator("input[name='loginId']").fill(email)
+            page.locator("input[name='password']").fill(password)
+            page.locator("button[type='submit']").click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(2000)
+
+        if "tistory.com" in page.url and "kakao" not in page.url:
+            print("  ✅ 재인증 성공 (폰 승인 불필요)")
+        else:
+            print("  📱 카카오 앱에서 [로그인 승인]을 눌러주세요. (최대 3분 대기)")
+            deadline = time.time() + 180
+            approved = False
+            while time.time() < deadline:
+                if "tistory.com" in page.url and "kakao" not in page.url:
+                    approved = True
+                    break
+                for btn_text in ["확인", "계속", "동의", "허용"]:
+                    btn = page.locator(f"button:has-text('{btn_text}')").first
+                    if btn.is_visible():
+                        btn.click()
+                        break
+                page.wait_for_timeout(3000)
+
+            if not approved:
+                print("  ❌ 재인증 시간 초과")
+                context.close()
+                return None
+
+        page.goto(f"{BLOG_URL}/manage", timeout=15000)
+        page.wait_for_load_state("networkidle")
+        if "/manage" in page.url and "login" not in page.url:
+            print("  ✅ 재인증 완료 — 쿠키 저장됨")
+            return context
+
+        context.close()
+        return None
+
+    except Exception as e:
+        print(f"  ❌ 재인증 오류: {e}")
+        context.close()
+        return None
 
 
 def post_article(page: Page, title: str, content: str):
@@ -179,7 +231,6 @@ def run():
     BROWSER_DATA_DIR.mkdir(exist_ok=True)
 
     with sync_playwright() as pw:
-        # persistent context: 카카오 기기 쿠키를 browser_data/에 영구 저장
         context = pw.chromium.launch_persistent_context(
             user_data_dir=str(BROWSER_DATA_DIR),
             headless=True,
@@ -188,13 +239,21 @@ def run():
 
         if not is_logged_in(page):
             print("  로그인 필요 → 자동 로그인 시도...")
-            logged_in = auto_login(page)
-
-            if not logged_in:
-                print("❌ 로그인 실패.")
+            if not auto_login(page):
+                # 쿠키 만료 → 재인증
+                print("  재인증 시작...")
                 context.close()
-                shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
-                return
+                context = reauth(pw)
+                if not context:
+                    print("❌ 재인증 실패.")
+                    shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
+                    return
+                page = context.new_page()
+                if not is_logged_in(page):
+                    print("❌ 로그인 실패.")
+                    context.close()
+                    shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
+                    return
 
         try:
             post_article(page, title, html)
