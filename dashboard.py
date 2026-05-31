@@ -29,7 +29,8 @@ def parse_task(path: Path) -> dict:
     data = {
         "task_id": path.stem, "topic": path.stem,
         "series": "-", "created_at": "-",
-        "priority": "medium", "template": "default", "intention": "",
+        "priority": "medium", "template": "default",
+        "type": "단편", "parts": "1", "intention": "",
     }
     parts = text.split("---")
     if len(parts) >= 3:
@@ -334,31 +335,47 @@ tbody tr:hover td { background: #fafbff; cursor: default; }
   <div id="tab-suggest" class="tab-pane">
     <div class="card">
       <div class="sugg-toolbar">
-        <span class="sugg-toolbar-title">AI 제안 주제 — 승인하면 대기열에 추가됩니다</span>
+        <span class="sugg-toolbar-title">AI 기획 제안 — 승인하면 대기열에 추가됩니다</span>
         <button class="btn-primary" id="suggest-btn" onclick="requestSuggest()">
-          ✨ 새 주제 제안 요청
+          ✨ 새 주제 기획 요청
         </button>
       </div>
       <table>
-        <thead><tr><th>주제</th><th>시리즈</th><th>기획 의도</th><th>우선순위</th><th width="130"></th></tr></thead>
+        <thead>
+          <tr><th>주제</th><th>시리즈</th><th>형태</th><th>우선순위</th><th width="140"></th></tr>
+        </thead>
         <tbody id="suggest-body">
           {% if suggestions %}
             {% for t in suggestions %}
-            <tr id="sugg-{{ t.task_id }}">
-              <td><strong>{{ t.topic }}</strong></td>
+            <tr id="sugg-{{ t.task_id }}" style="cursor:pointer;" onclick="toggleOutline('{{ t.task_id }}')">
+              <td>
+                <strong>{{ t.topic }}</strong>
+                <div style="font-size:11px;color:#94a3b8;margin-top:2px;">▼ 클릭해서 개요 보기</div>
+              </td>
               <td><span class="badge b-series">{{ t.series }}</span></td>
-              <td><div class="intent">{{ t.intention or '-' }}</div></td>
+              <td>
+                {% set ctype = t.get('type', '단편') %}
+                {% set parts = t.get('parts', 1)|int %}
+                <span class="badge {{ 'b-high' if ctype == '시리즈' else 'b-medium' }}">
+                  {{ ctype }}{% if ctype == '시리즈' and parts > 1 %} {{ parts }}부작{% endif %}
+                </span>
+              </td>
               <td><span class="badge b-{{ t.priority }}">{{ t.priority }}</span></td>
-              <td style="display:flex;gap:6px;padding:10px 16px;">
+              <td onclick="event.stopPropagation()" style="display:flex;gap:6px;padding:10px 16px;">
                 <button class="btn-ok" onclick="approve('{{ t.task_id }}')">✅ 승인</button>
                 <button class="btn-no" onclick="reject('{{ t.task_id }}')">✕</button>
+              </td>
+            </tr>
+            <tr class="sum-row" id="outline-{{ t.task_id }}">
+              <td colspan="5">
+                <div class="sum-text" style="white-space:pre-wrap;">{{ t.intention }}</div>
               </td>
             </tr>
             {% endfor %}
           {% else %}
           <tr id="empty-row">
             <td colspan="5" class="empty">
-              제안된 주제가 없습니다.<br>위 버튼을 눌러 AI에게 새 주제를 제안받아 보세요.
+              제안된 주제가 없습니다.<br>위 버튼을 눌러 AI에게 새 주제 기획을 요청해보세요.
             </td>
           </tr>
           {% endif %}
@@ -380,9 +397,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-// 요약 펼치기
+// 요약 / 개요 펼치기
 function toggleSummary(id) {
   const row = document.getElementById('sum-' + id);
+  if (row) row.classList.toggle('open');
+}
+function toggleOutline(id) {
+  const row = document.getElementById('outline-' + id);
   if (row) row.classList.toggle('open');
 }
 

@@ -75,7 +75,8 @@ def get_next_task_id(folder: Optional[Path] = None) -> str:
 
 
 def create_task(task_id: str, topic: str, series: str, priority: str,
-                template: str, intention: str, status: str = "planned",
+                template: str, content_type: str, parts: int,
+                outline: str, status: str = "planned",
                 folder: Optional[Path] = None):
     folder = folder or TASKS_PLANNED
     folder.mkdir(exist_ok=True)
@@ -86,21 +87,36 @@ topic: {topic}
 series: {series}
 priority: {priority}
 template: {template}
+type: {content_type}
+parts: {parts}
 created_by: planner_agent
 created_at: {date.today().isoformat()}
 ---
 
-# 기획 의도
+# 콘텐츠 개요
 
-{intention}
+{outline}
 """
     path = folder / f"{task_id}.md"
     path.write_text(content, encoding="utf-8")
     return path
 
 
+def get_series_snapshot() -> str:
+    """현재 planned 폴더의 시리즈 분포를 요약한다."""
+    counter = {}
+    for f in TASKS_PLANNED.glob("*.md"):
+        text = f.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if line.startswith("series:"):
+                s = line.split(":", 1)[1].strip()
+                counter[s] = counter.get(s, 0) + 1
+                break
+    return "\n".join(f"  - {s}: {n}개" for s, n in sorted(counter.items(), key=lambda x: -x[1]))
+
+
 def suggest():
-    """AI가 새 주제를 제안하고 tasks/suggestions/ 에 저장한다."""
+    """AI가 새 주제를 기획하고 tasks/suggestions/ 에 저장한다."""
     print("=" * 50)
     print("Planner Agent — 주제 제안 모드")
     print("=" * 50)
@@ -109,45 +125,57 @@ def suggest():
     existing = get_existing_topics()
     planned_count   = len(list(TASKS_PLANNED.glob("*.md")))
     published_count = count_published()
+    series_snapshot = get_series_snapshot()
 
     print(f"발행 완료: {published_count}개 | 대기 중: {planned_count}개")
-    print(f"기존 주제 {len(existing)}개 제외하고 새 주제 제안 요청 중...")
+    print("GPT에게 새 콘텐츠 기획 요청 중...")
 
-    existing_list = "\n".join(f"- {t}" for t in sorted(existing)[:60])
-    if len(existing) > 60:
-        existing_list += f"\n- ... 외 {len(existing)-60}개"
+    existing_sample = "\n".join(f"- {t}" for t in sorted(existing)[:30])
 
-    prompt = f"""당신은 MBTI 블로그 편집국의 AI 기획자입니다.
+    prompt = f"""당신은 MBTI 블로그 편집국의 수석 기획자입니다.
+현재 블로그의 콘텐츠 구성을 분석하고, 독자에게 새로운 가치를 줄 수 있는 주제를 기획해주세요.
 
-현재 운영 현황:
+## 현재 콘텐츠 현황
 - 발행 완료: {published_count}개
 - 대기 중: {planned_count}개
+- 시리즈 분포:
+{series_snapshot if series_snapshot else "  - mbti_relationship: " + str(planned_count) + "개"}
 
-편집 방침 (decisions.md):
+## 기존 주제 샘플 (이 패턴 반복 금지)
+{existing_sample}
+{"  ... (외 " + str(len(existing)-30) + "개 동일 패턴)" if len(existing) > 30 else ""}
+
+## 편집 방침
 {memory.get('decisions', '')}
 
-이미 기획/발행된 주제 (중복 금지):
-{existing_list}
+---
 
-위 내용을 바탕으로 블로그에 새롭게 추가할 주제 15개를 제안해주세요.
-기존 mbti_relationship 시리즈의 새 조합이나 완전히 새로운 시리즈 모두 환영합니다.
+위 분석을 바탕으로, **기존과 다른 새로운 각도**의 콘텐츠 5개를 기획해주세요.
 
-아래 JSON 배열 형식으로만 출력하세요 (다른 텍스트 없이):
+기획 원칙:
+1. 이미 55개 이상 있는 "X Y 커플 궁합" 단순 조합 반복 금지
+2. 독자가 실제로 궁금해할 구체적인 상황/감정/행동 기반 주제
+3. 단편(1개로 완결) 또는 시리즈(N부작 연재) 중 적합한 형태 선택
+4. 각 주제마다 **어떻게 쓸지 구체적인 개요** (단락 구성, 핵심 포인트) 포함
+
+아래 JSON 배열 형식으로만 출력 (다른 텍스트 없이):
 [
   {{
-    "topic": "주제명",
-    "series": "시리즈명",
+    "topic": "구체적인 주제명",
+    "series": "새 시리즈명 또는 기존 시리즈명",
     "priority": "high 또는 medium 또는 low",
-    "template": "relationship_v1",
-    "intention": "기획 의도 1-2문장"
+    "template": "적합한 템플릿명 (없으면 new)",
+    "type": "단편 또는 시리즈",
+    "parts": 1,
+    "outline": "## 기획 의도\\n왜 이 주제인가 1-2문장\\n\\n## 구성안\\n- 1단락: 무엇을\\n- 2단락: 무엇을\\n- 3단락: 무엇을\\n\\n## 핵심 포인트\\n독자가 얻어가야 할 것"
   }}
 ]"""
 
     resp = azure_client.chat.completions.create(
         model=DEPLOYMENT,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.9,
-        max_completion_tokens=2000,
+        temperature=0.85,
+        max_completion_tokens=3000,
     )
     raw = resp.choices[0].message.content.strip()
 
@@ -164,20 +192,22 @@ def suggest():
     saved = 0
     for i, s in enumerate(suggestions, len(existing_sugg) + 1):
         task_id = f"{today_str}_{i:03d}s"
-        path = create_task(
-            task_id  = task_id,
-            topic    = s.get("topic", ""),
-            series   = s.get("series", "mbti_relationship"),
-            priority = s.get("priority", "medium"),
-            template = s.get("template", "relationship_v1"),
-            intention= s.get("intention", ""),
-            status   = "suggestion",
-            folder   = TASKS_SUGGESTIONS,
+        create_task(
+            task_id      = task_id,
+            topic        = s.get("topic", ""),
+            series       = s.get("series", "mbti_relationship"),
+            priority     = s.get("priority", "medium"),
+            template     = s.get("template", "relationship_v1"),
+            content_type = s.get("type", "단편"),
+            parts        = int(s.get("parts", 1)),
+            outline      = s.get("outline", "").replace("\\n", "\n"),
+            status       = "suggestion",
+            folder       = TASKS_SUGGESTIONS,
         )
-        print(f"  💡 {s.get('topic', '')}")
+        print(f"  💡 [{s.get('type','단편')}] {s.get('topic', '')}")
         saved += 1
 
-    print(f"\n✅ {saved}개 주제 제안 완료 → tasks/suggestions/")
+    print(f"\n✅ {saved}개 주제 기획 완료 → tasks/suggestions/")
 
 
 def run():
@@ -204,7 +234,13 @@ def run():
 
     for task_data in approved_tasks:
         task_id = get_next_task_id()
-        create_task(task_id=task_id, **task_data)
+        create_task(
+            task_id      = task_id,
+            content_type = task_data.pop("type", "단편"),
+            parts        = task_data.pop("parts", 1),
+            outline      = task_data.pop("outline", task_data.pop("intention", "")),
+            **task_data,
+        )
         print(f"  📋 Task 생성: {task_id} — {task_data['topic']}")
 
     print(f"\n✅ {len(approved_tasks)}개 Task 생성 완료")
