@@ -14,6 +14,7 @@ import json
 import shutil
 from pathlib import Path
 from datetime import date
+from typing import Optional
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
@@ -51,7 +52,7 @@ def parse_task(task_file: Path) -> dict:
     return parsed
 
 
-def get_next_task() -> Path | None:
+def get_next_task() -> Optional[Path]:
     """planned/ 에서 priority → 파일명 순으로 다음 Task를 선택한다."""
     tasks = sorted(TASKS_PLANNED.glob("*.md"))
     priority_order = {"high": 0, "medium": 1, "low": 2}

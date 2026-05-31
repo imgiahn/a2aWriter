@@ -14,6 +14,7 @@ import re
 import sys
 import shutil
 from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page, BrowserContext
 
@@ -30,7 +31,7 @@ BLOG_NAME = "mbtireallove"
 BLOG_URL  = f"https://{BLOG_NAME}.tistory.com"
 
 
-def get_next_task() -> Path | None:
+def get_next_task() -> Optional[Path]:
     tasks = sorted(TASKS_WRITING.glob("*.md"))
     return tasks[0] if tasks else None
 
