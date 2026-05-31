@@ -10,6 +10,9 @@ tistory_cookies.json
 # 런타임 데이터
 daily_log.json
 
+# 브라우저 persistent 데이터 (카카오 기기 인증 쿠키 포함, 절대 올리면 안됨)
+browser_data/
+
 # 생성된 HTML 초안/발행본 (대용량)
 articles/draft/
 articles/published/
