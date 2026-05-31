@@ -10,6 +10,10 @@ tistory_cookies.json
 # 런타임 데이터
 daily_log.json
 
+# 생성된 HTML 초안/발행본 (대용량)
+articles/draft/
+articles/published/
+
 # 디버그 스크린샷
 *.png
 
@@ -25,3 +29,4 @@ venv/
 # 에디터
 .vscode/
 .idea/
+mycron.txt
