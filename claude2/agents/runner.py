@@ -45,16 +45,13 @@ def _chat(system: str, user: str, max_tokens: int = 2000) -> str:
 
 
 def run_researcher(news_list: list, paper: dict, writing_guide: str, metrics: str, published: list = None) -> dict:
-    """소재 선택 + 글쓰기 각도 결정"""
+    """핫 토픽 선정 + 관련 기사 묶기"""
     published_section = ""
     if published:
         published_section = f"\n## 이미 발행된 글 목록 (중복 금지)\n{json.dumps(published, ensure_ascii=False, indent=2)}\n"
 
-    user = f"""## 오늘 수집된 LLM 뉴스
+    user = f"""## 오늘 수집된 LLM 뉴스 목록
 {json.dumps(news_list, ensure_ascii=False, indent=2)}
-
-## 오늘의 트렌딩 논문
-{json.dumps(paper, ensure_ascii=False, indent=2)}
 
 ## 현재 Writing Guide
 {writing_guide}

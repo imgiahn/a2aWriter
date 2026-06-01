@@ -84,7 +84,7 @@ def main():
         print(f"❌ 환경변수 없음: {missing}")
         sys.exit(1)
 
-    from tools.search import fetch_llm_news, fetch_trending_paper
+    from tools.search import fetch_llm_news
     from agents.runner import run_researcher, run_writer, run_editor
     from tools.publisher import publish
 
@@ -93,21 +93,21 @@ def main():
 
     # 1. 소재 수집
     print("\n📡 소재 수집 중...")
-    news_list = fetch_llm_news(limit=5)
-    paper = fetch_trending_paper()
-    print(f"  뉴스 {len(news_list)}건, 논문 1건 수집 완료")
+    news_list = fetch_llm_news(limit=15)
+    print(f"  뉴스 {len(news_list)}건 수집 완료")
 
-    if not news_list and not paper:
+    if not news_list:
         print("❌ 소재 수집 실패")
         sys.exit(1)
 
-    # 2. Researcher
+    # 2. Researcher — 핫 토픽 선정 + 관련 기사 묶기
     print("\n🔍 Researcher 분석 중...")
     published_titles = get_published_titles()
     print(f"  기발행 글: {len(published_titles)}건 (중복 방지 적용)")
     try:
-        research = run_researcher(news_list, paper, writing_guide, metrics, published_titles)
-        print(f"  각도: {research.get('story_angle', '')[:60]}")
+        research = run_researcher(news_list, {}, writing_guide, metrics, published_titles)
+        print(f"  핫 토픽: {research.get('hot_topic', '')}")
+        print(f"  선택 기사: {len(research.get('selected_articles', []))}건")
     except Exception as e:
         print(f"❌ Researcher 오류: {e}")
         sys.exit(1)
