@@ -25,8 +25,43 @@ def _is_llm_related(title: str, summary: str = "") -> bool:
     return any(kw in text for kw in LLM_KEYWORDS)
 
 
+def _fetch_article_body(url: str) -> str:
+    """기사 URL에서 본문 텍스트 추출 (최대 1500자)"""
+    try:
+        from html.parser import HTMLParser
+
+        class TextExtractor(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.text = []
+                self._skip = False
+
+            def handle_starttag(self, tag, attrs):
+                if tag in ("script", "style", "nav", "footer", "header"):
+                    self._skip = True
+
+            def handle_endtag(self, tag):
+                if tag in ("script", "style", "nav", "footer", "header"):
+                    self._skip = False
+
+            def handle_data(self, data):
+                if not self._skip and data.strip():
+                    self.text.append(data.strip())
+
+        resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        parser = TextExtractor()
+        parser.feed(resp.text)
+        body = " ".join(parser.text)
+        # 공백 정리
+        import re
+        body = re.sub(r"\s+", " ", body).strip()
+        return body[:1500]
+    except Exception:
+        return ""
+
+
 def fetch_llm_news(limit: int = 5) -> list:
-    """RSS 피드에서 최신 LLM 뉴스 수집"""
+    """RSS 피드에서 최신 LLM 뉴스 수집 + 기사 본문 가져오기"""
     articles = []
 
     for source in NEWS_SOURCES:
@@ -36,10 +71,13 @@ def fetch_llm_news(limit: int = 5) -> list:
                 title = entry.get("title", "")
                 summary = entry.get("summary", "")
                 if _is_llm_related(title, summary):
+                    url = entry.get("link", "")
+                    body = _fetch_article_body(url)
                     articles.append({
                         "title": title,
-                        "url": entry.get("link", ""),
+                        "url": url,
                         "summary": summary[:400],
+                        "body": body,
                         "published": entry.get("published", ""),
                         "source": feed.feed.get("title", source),
                     })
@@ -48,7 +86,6 @@ def fetch_llm_news(limit: int = 5) -> list:
         except Exception as e:
             print(f"  뉴스 수집 오류 ({source}): {e}")
 
-    # 중복 제거 후 최신 순 반환
     seen = set()
     unique = []
     for a in articles:

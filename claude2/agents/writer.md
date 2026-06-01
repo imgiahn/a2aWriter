@@ -18,6 +18,21 @@
 
 1,200~1,800자 (너무 길면 독자 이탈)
 
+## 반드시 지켜야 할 것: 출처 링크
+
+글 마지막에 항상 출처 섹션을 넣어. 독자가 원본을 볼 수 있어야 해.
+
+```html
+<hr>
+<p><strong>📌 출처</strong></p>
+<ul>
+  <li>뉴스: <a href="뉴스URL" target="_blank">뉴스 제목</a></li>
+  <li>논문: <a href="논문URL" target="_blank">논문 제목</a></li>
+</ul>
+```
+
+URL은 research_result에 있는 값 그대로 사용해.
+
 ## 출력 형식
 
 반드시 HTML로 출력해. 티스토리에 바로 붙여넣을 수 있게.
@@ -27,6 +42,12 @@
 <p>도입부...</p>
 <h2>소제목</h2>
 <p>내용...</p>
+<hr>
+<p><strong>📌 출처</strong></p>
+<ul>
+  <li>뉴스: <a href="..." target="_blank">...</a></li>
+  <li>논문: <a href="..." target="_blank">...</a></li>
+</ul>
 ```
 
 제목은 반드시 `<!-- TITLE: -->` 주석으로 첫 줄에 넣어.
