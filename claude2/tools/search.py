@@ -70,7 +70,7 @@ def fetch_trending_paper() -> dict:
     }
 
     try:
-        response = requests.get(url, params=params, timeout=15)
+        response = requests.get(url, params=params, timeout=8)
         feed = feedparser.parse(response.text)
 
         for entry in feed.entries:

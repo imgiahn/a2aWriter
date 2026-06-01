@@ -39,7 +39,7 @@ def _chat(system: str, user: str, max_tokens: int = 2000) -> str:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        max_tokens=max_tokens,
+        max_completion_tokens=max_tokens,
     )
     return response.choices[0].message.content
 
