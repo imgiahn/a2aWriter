@@ -7,18 +7,20 @@ import requests
 import feedparser
 
 LLM_KEYWORDS = [
-    "llm", "gpt", "claude", "gemini", "llama", "mistral",
-    "openai", "anthropic", "deepmind", "ai model", "language model",
-    "transformer", "fine-tuning", "rag", "agent", "reasoning",
-    "chatgpt", "copilot", "sora", "diffusion", "multimodal"
+    # 한국어
+    "ai", "인공지능", "챗gpt", "chatgpt", "클로드", "제미나이", "오픈ai", "앤스로픽",
+    "생성ai", "거대언어모델", "llm", "에이전트", "자동화", "딥러닝", "머신러닝",
+    "구글ai", "메타ai", "gpt", "코파일럿", "sora", "멀티모달",
+    # 영어 (한국 매체도 영어 표기 많이 씀)
+    "openai", "anthropic", "gemini", "llama", "claude", "deepmind",
 ]
 
 NEWS_SOURCES = [
-    "https://hnrss.org/frontpage",
-    "https://venturebeat.com/category/ai/feed/",
-    "https://www.marktechpost.com/feed/",
-    "https://techcrunch.com/category/artificial-intelligence/feed/",
-    "https://www.theregister.com/headlines.atom",
+    "https://www.aitimes.com/rss/allArticle.xml",       # AI타임스 (AI 전문)
+    "https://www.bloter.net/feed",                       # 블로터 (IT/테크)
+    "https://zdnet.co.kr/rss.xml",                       # ZDNet Korea
+    "https://www.etnews.com/rss/S1N11.xml",              # 전자신문 IT
+    "https://www.techm.kr/rss/allArticle.xml",           # 테크M
 ]
 
 
