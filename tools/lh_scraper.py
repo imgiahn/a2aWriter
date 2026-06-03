@@ -2,7 +2,7 @@
 LH 청약플러스 스크래퍼
 
 사용:
-  python tools/lh_scraper.py              # 서울+경기 공고 목록 출력
+  python tools/lh_scraper.py              # 서울+경기 공고 목록 출력 (분양+임대)
   python tools/lh_scraper.py --detail URL # 특정 공고 상세 텍스트 출력
 """
 
@@ -12,13 +12,18 @@ import argparse
 from typing import Optional, List
 from playwright.sync_api import sync_playwright, Page
 
-LH_MAIN_URL = "https://apply.lh.or.kr/lhapply/main.do"
-LH_LIST_URL = "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do?mi=1026"
+LH_MAIN_URL   = "https://apply.lh.or.kr/lhapply/main.do"
+LH_SALE_URL   = "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do?mi=1027"  # 분양주택
+LH_RENTAL_URL = "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do?mi=1026"  # 임대주택
 LH_DETAIL_BASE = "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do"
 
-TARGET_REGIONS = {"서울", "경기"}
-# 지역 컬럼 텍스트 → 필터 매칭
 REGION_KEYWORDS = ["서울", "경기"]
+
+# 목록 유형별 설정: (URL, mi값, housing_source, priority)
+LIST_PAGES = [
+    (LH_SALE_URL,   "1027", "분양", "high"),    # 분양 우선
+    (LH_RENTAL_URL, "1026", "임대", "medium"),
+]
 
 
 def _make_browser(pw):
@@ -30,79 +35,90 @@ def _make_browser(pw):
     return browser, page
 
 
-def _load_list_page(page: Page):
-    """메인 → 목록 순서로 이동해야 정상 로딩됨."""
+def _scrape_page(page: Page, list_url: str, mi: str, housing_source: str, priority: str) -> List[dict]:
+    """목록 페이지 하나에서 서울/경기 공고를 수집한다."""
     page.goto(LH_MAIN_URL, timeout=20000)
     page.wait_for_load_state("networkidle", timeout=15000)
-    page.goto(LH_LIST_URL, timeout=20000)
+    page.goto(list_url, timeout=20000)
     page.wait_for_load_state("networkidle", timeout=15000)
     page.wait_for_timeout(3000)
 
+    rows = page.query_selector_all("tbody tr")
+    print(f"  [{housing_source}] {len(rows)}행 발견", file=sys.stderr)
+
+    results = []
+    for row in rows:
+        cells = [td.inner_text().strip() for td in row.query_selector_all("td")]
+        if len(cells) < 6:
+            continue
+
+        region = cells[3] if len(cells) > 3 else ""
+        if not any(kw in region for kw in REGION_KEYWORDS):
+            continue
+
+        link_el = row.query_selector("a.wrtancInfoBtn")
+        notice_name = ""
+        notice_id   = ""
+        if link_el:
+            notice_name = link_el.inner_text().strip()
+            notice_id   = link_el.get_attribute("data-id1") or ""
+        else:
+            notice_name = cells[2] if len(cells) > 2 else ""
+
+        if not notice_name:
+            continue
+
+        detail_url = (
+            f"{LH_DETAIL_BASE}?wrtancNo={notice_id}&mi={mi}"
+            if notice_id else ""
+        )
+
+        results.append({
+            "notice_id":      notice_id,
+            "notice_name":    notice_name,
+            "supply_type":    cells[1] if len(cells) > 1 else "",
+            "region":         region,
+            "notice_date":    cells[5] if len(cells) > 5 else "",
+            "deadline":       cells[6] if len(cells) > 6 else "",
+            "status":         cells[7] if len(cells) > 7 else "",
+            "detail_url":     detail_url,
+            "housing_source": housing_source,  # "분양" or "임대"
+            "priority":       priority,
+            "list_mi":        mi,
+        })
+
+    return results
+
 
 def scrape() -> List[dict]:
-    """서울/경기 공고 목록을 수집해 반환한다."""
+    """분양(mi=1027) → 임대(mi=1026) 순으로 서울/경기 공고를 수집한다."""
     results = []
 
     with sync_playwright() as pw:
         browser, page = _make_browser(pw)
         try:
-            _load_list_page(page)
-
-            rows = page.query_selector_all("tbody tr")
-            print(f"  총 {len(rows)}행 발견", file=sys.stderr)
-
-            for row in rows:
-                cells = [td.inner_text().strip() for td in row.query_selector_all("td")]
-                if len(cells) < 6:
-                    continue
-
-                region = cells[3] if len(cells) > 3 else ""
-                if not any(kw in region for kw in REGION_KEYWORDS):
-                    continue
-
-                # 공고명 + 공고번호(data-id1) 추출
-                link_el = row.query_selector("a.wrtancInfoBtn")
-                notice_name = ""
-                notice_id   = ""
-                if link_el:
-                    notice_name = link_el.inner_text().strip()
-                    notice_id   = link_el.get_attribute("data-id1") or ""
-                else:
-                    notice_name = cells[2] if len(cells) > 2 else ""
-
-                if not notice_name:
-                    continue
-
-                detail_url = (
-                    f"{LH_DETAIL_BASE}?wrtancNo={notice_id}&mi=1026"
-                    if notice_id else ""
-                )
-
-                results.append({
-                    "notice_id":   notice_id,
-                    "notice_name": notice_name,
-                    "supply_type": cells[1] if len(cells) > 1 else "",
-                    "region":      region,
-                    "notice_date": cells[5] if len(cells) > 5 else "",
-                    "deadline":    cells[6] if len(cells) > 6 else "",
-                    "status":      cells[7] if len(cells) > 7 else "",
-                    "detail_url":  detail_url,
-                })
-
+            for list_url, mi, housing_source, priority in LIST_PAGES:
+                items = _scrape_page(page, list_url, mi, housing_source, priority)
+                results.extend(items)
         finally:
             browser.close()
 
     return results
 
 
-def fetch_detail_by_notice_id(notice_id: str) -> str:
-    """목록 페이지에서 공고번호에 해당하는 항목을 클릭해 상세 텍스트를 추출한다."""
+def fetch_detail_by_notice_id(notice_id: str, mi: str = "1026") -> str:
+    """목록 페이지에서 공고번호 항목을 클릭해 상세 텍스트를 추출한다."""
+    list_url = LH_SALE_URL if mi == "1027" else LH_RENTAL_URL
+
     with sync_playwright() as pw:
         browser, page = _make_browser(pw)
         try:
-            _load_list_page(page)
+            page.goto(LH_MAIN_URL, timeout=20000)
+            page.wait_for_load_state("networkidle", timeout=15000)
+            page.goto(list_url, timeout=20000)
+            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_timeout(3000)
 
-            # data-id1이 notice_id와 일치하는 링크 클릭
             link = page.query_selector(f'a.wrtancInfoBtn[data-id1="{notice_id}"]')
             if not link:
                 return ""
@@ -110,7 +126,6 @@ def fetch_detail_by_notice_id(notice_id: str) -> str:
             link.click()
             page.wait_for_timeout(3000)
 
-            # 오버레이/레이어 팝업 또는 페이지 이동 후 본문 추출
             for sel in [".popup_wrap", ".layer_wrap", ".view_wrap", ".detail_wrap",
                         ".bbs_view", ".cont_wrap", "#content .view", "main"]:
                 el = page.query_selector(sel)
@@ -119,18 +134,19 @@ def fetch_detail_by_notice_id(notice_id: str) -> str:
                     if len(text) > 200:
                         return text[:6000]
 
-            # 전체 페이지 텍스트 (목록 포함)
             return page.inner_text("body").strip()[:6000]
         finally:
             browser.close()
 
 
 def fetch_detail(url: str) -> str:
-    """공고 상세 URL에서 notice_id를 추출해 fetch_detail_by_notice_id를 호출한다."""
+    """공고 상세 URL에서 notice_id와 mi를 추출해 fetch_detail_by_notice_id를 호출한다."""
     import re as _re
-    m = _re.search(r"wrtancNo=([^&]+)", url)
-    if m:
-        return fetch_detail_by_notice_id(m.group(1))
+    notice_m = _re.search(r"wrtancNo=([^&]+)", url)
+    mi_m     = _re.search(r"mi=(\d+)", url)
+    if notice_m:
+        mi = mi_m.group(1) if mi_m else "1026"
+        return fetch_detail_by_notice_id(notice_m.group(1), mi)
     return ""
 
 
@@ -142,10 +158,12 @@ if __name__ == "__main__":
     if args.detail:
         print(fetch_detail(args.detail))
     else:
-        print("LH 청약플러스 서울+경기 공고 수집 중...", file=sys.stderr)
+        print("LH 청약플러스 서울+경기 공고 수집 중 (분양+임대)...", file=sys.stderr)
         items = scrape()
         if not items:
             print("수집 결과 없음.")
         else:
             print(json.dumps(items, ensure_ascii=False, indent=2))
-            print(f"\n총 {len(items)}건", file=sys.stderr)
+            sale_cnt   = sum(1 for i in items if i["housing_source"] == "분양")
+            rental_cnt = sum(1 for i in items if i["housing_source"] == "임대")
+            print(f"\n총 {len(items)}건 (분양 {sale_cnt}건 / 임대 {rental_cnt}건)", file=sys.stderr)

@@ -341,7 +341,9 @@ def cheongyak_run(paths: dict):
             continue
 
         # 상세 페이지 크롤링 + 구조화 추출
-        print(f"  상세 수집 중: {notice_name[:30]}...")
+        housing_source = item.get("housing_source", "임대")
+        task_priority  = item.get("priority", "medium")  # 분양=high, 임대=medium
+        print(f"  상세 수집 중: [{housing_source}] {notice_name[:30]}...")
         detail_text = fetch_detail(detail_url)
         fields      = extract_notice_fields(detail_text, supply_type)
         category    = get_housing_category(supply_type)
@@ -355,7 +357,8 @@ task_id: {task_id}
 status: planned
 topic: {notice_name} 공고 해설
 series: 청약공고해설
-priority: high
+priority: {task_priority}
+housing_source: {housing_source}
 template: {category}
 type: 단편
 parts: 1
@@ -387,7 +390,7 @@ created_at: {date.today().isoformat()}
 ---
 """
         (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
-        print(f"  📋 Task 생성: {task_id} — [{category}] {notice_name[:30]}")
+        print(f"  📋 Task 생성: {task_id} — [{housing_source}/{category}] {notice_name[:30]}")
         created += 1
 
     if created == 0:
