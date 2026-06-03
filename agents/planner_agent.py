@@ -307,6 +307,8 @@ def _write_task_file(folder: Path, task_id: str, item: dict, fields: dict,
     region      = item.get("region", "")
     notice_date = item.get("notice_date", "")
     detail_url  = item.get("detail_url", "")
+    has_pdf_flag = "true" if pdf_text else "false"
+    pdf_section  = ("## PDF 원문\n\n```\n" + pdf_text[:6000] + "\n```") if pdf_text else ""
 
     content = f"""---
 task_id: {task_id}
@@ -343,9 +345,9 @@ qualifications: |
   {fields.get('qualifications', '').replace(chr(10), chr(10) + '  ')}
 created_by: planner_agent
 created_at: {date.today().isoformat()}
-has_pdf: {"true" if pdf_text else "false"}
+has_pdf: {has_pdf_flag}
 ---
-{("## PDF 원문\n\n```\n" + pdf_text[:6000] + "\n```") if pdf_text else ""}
+{pdf_section}
 """
     (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
 
