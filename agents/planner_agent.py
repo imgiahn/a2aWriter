@@ -297,7 +297,8 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
 
 
 def _write_task_file(folder: Path, task_id: str, item: dict, fields: dict,
-                     category: str, housing_source: str, task_priority: str):
+                     category: str, housing_source: str, task_priority: str,
+                     pdf_text: str = ""):
     """Task 파일을 생성한다. planner 운영/개발 모드 공통 사용."""
     folder.mkdir(parents=True, exist_ok=True)
     notice_id   = item.get("notice_id", "")
@@ -342,7 +343,9 @@ qualifications: |
   {fields.get('qualifications', '').replace(chr(10), chr(10) + '  ')}
 created_by: planner_agent
 created_at: {date.today().isoformat()}
+has_pdf: {"true" if pdf_text else "false"}
 ---
+{("## PDF 원문\n\n```\n" + pdf_text[:6000] + "\n```") if pdf_text else ""}
 """
     (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
 
@@ -363,7 +366,7 @@ def get_existing_notice_ids(blog: str) -> set:
 def cheongyak_run(paths: dict):
     import sys as _sys, os as _os
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-    from tools.lh_scraper import scrape, fetch_detail
+    from tools.lh_scraper import scrape, fetch_detail_with_pdf
 
     print("=" * 50)
     print("Planner Agent — llmenginehistory (LH 청약 공고)")
@@ -397,12 +400,17 @@ def cheongyak_run(paths: dict):
             print(f"  스킵 (중복): {notice_name}")
             continue
 
-        # 상세 페이지 크롤링 + 구조화 추출
+        # 상세 페이지 크롤링 + PDF 다운로드 + 구조화 추출
         housing_source = item.get("housing_source", "임대")
         task_priority  = item.get("priority", "medium")
         print(f"  상세 수집 중: [{housing_source}] {notice_name[:30]}...")
-        detail_text = fetch_detail(detail_url)
-        fields      = extract_notice_fields(detail_text, supply_type)
+        detail = fetch_detail_with_pdf(detail_url.split("wrtancNo=")[-1].split("&")[0],
+                                       item.get("list_mi", "1026"))
+        detail_text = detail["text"]
+        pdf_text    = detail.get("pdf_text", "")
+        # PDF 있으면 GPT 추출 시 함께 활용
+        combined    = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
+        fields      = extract_notice_fields(combined, supply_type)
         category    = get_housing_category(supply_type)
 
         _write_task_file(
@@ -410,6 +418,7 @@ def cheongyak_run(paths: dict):
             task_id=get_next_task_id(paths["planned"]),
             item=item, fields=fields, category=category,
             housing_source=housing_source, task_priority=task_priority,
+            pdf_text=pdf_text,
         )
         print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
         created += 1
@@ -428,20 +437,30 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
     """개발용: 공고 1건만 처리해 tasks/test/ 에 저장. 운영 데이터 불변."""
     import sys as _sys, os as _os
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-    from tools.lh_scraper import fetch_detail_by_notice_id, LH_SALE_URL, LH_RENTAL_URL
+    from tools.lh_scraper import fetch_detail_with_pdf
 
     print("=" * 50)
-    print(f"[DEV] Planner — 단일 공고 모드: {notice_id}")
+    print(f"[DEV] Planner — 단일 공고 모드: {notice_id} (mi={mi})")
     print("=" * 50)
 
     test_folder = Path(f"blogs/{blog}/tasks/test")
     test_folder.mkdir(parents=True, exist_ok=True)
 
-    print(f"  상세 수집 중 (mi={mi})...")
-    detail_text = fetch_detail_by_notice_id(notice_id, mi)
+    print(f"  상세 수집 중...")
+    detail = fetch_detail_with_pdf(notice_id, mi)
+    detail_text = detail["text"]
+    pdf_text    = detail.get("pdf_text", "")
+    pdf_filename = detail.get("pdf_filename", "")
+
     if not detail_text:
         print(f"❌ 공고 텍스트 수집 실패. notice_id={notice_id}, mi={mi} 확인")
         return
+
+    print(f"  상세 텍스트: {len(detail_text)}자")
+    if pdf_text:
+        print(f"  PDF 추출 완료: {pdf_filename} ({len(pdf_text)}자)")
+    else:
+        print(f"  PDF: 없음 또는 추출 실패")
 
     # 기본 정보 추정 (텍스트에서)
     housing_source = "분양" if mi == "1027" else "임대"
@@ -455,7 +474,8 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
         if supply_type:
             break
 
-    fields   = extract_notice_fields(detail_text, supply_type)
+    combined = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
+    fields   = extract_notice_fields(combined, supply_type)
     category = get_housing_category(supply_type)
     priority = "high" if mi == "1027" else "medium"
 
@@ -476,6 +496,7 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
         folder=test_folder, task_id=task_id, item=item,
         fields=fields, category=category,
         housing_source=housing_source, task_priority=priority,
+        pdf_text=pdf_text,
     )
 
     out_path = test_folder / f"{task_id}.md"

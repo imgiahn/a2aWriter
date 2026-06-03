@@ -106,8 +106,68 @@ def scrape() -> List[dict]:
     return results
 
 
+def _extract_page_text(page: Page) -> str:
+    """현재 페이지(공고 상세)에서 본문 텍스트를 추출한다."""
+    for sel in [".popup_wrap", ".layer_wrap", ".view_wrap", ".detail_wrap",
+                ".bbs_view", ".cont_wrap", "#content .view", "main"]:
+        el = page.query_selector(sel)
+        if el:
+            text = el.inner_text().strip()
+            if len(text) > 200:
+                return text[:6000]
+    return page.inner_text("body").strip()[:6000]
+
+
+def _get_pdf_file_ids(page: Page) -> List[str]:
+    """현재 페이지에서 PDF 파일 ID 목록을 추출한다."""
+    import re as _re
+    ids = []
+    for a in page.query_selector_all("a[href*='fileDownLoad']"):
+        href = a.get_attribute("href") or ""
+        name = a.inner_text().strip().lower()
+        if ".pdf" in name:
+            m = _re.search(r"fileDownLoad\(['\"](\d+)['\"]\)", href)
+            if m:
+                ids.append(m.group(1))
+    return ids
+
+
+def _download_pdf_text(page: Page, file_id: str) -> str:
+    """playwright로 PDF를 다운로드해 텍스트를 반환한다."""
+    import os, tempfile
+    try:
+        from tools.pdf_parser import extract_text_from_file, clean_pdf_text
+    except ImportError:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+        from tools.pdf_parser import extract_text_from_file, clean_pdf_text
+
+    try:
+        with page.expect_download(timeout=20000) as dl_info:
+            page.evaluate(f"fileDownLoad('{file_id}')")
+        download = dl_info.value
+        tmp_path = tempfile.mktemp(suffix=".pdf")
+        download.save_as(tmp_path)
+        raw = extract_text_from_file(tmp_path)
+        os.unlink(tmp_path)
+        return clean_pdf_text(raw)
+    except Exception as e:
+        print(f"  ⚠️  PDF 다운로드 실패 (fileId={file_id}): {e}", file=sys.stderr)
+        return ""
+
+
 def fetch_detail_by_notice_id(notice_id: str, mi: str = "1026") -> str:
-    """목록 페이지에서 공고번호 항목을 클릭해 상세 텍스트를 추출한다."""
+    """목록 페이지에서 공고번호 항목을 클릭해 상세 텍스트를 추출한다 (PDF 미포함)."""
+    result = fetch_detail_with_pdf(notice_id, mi)
+    return result["text"]
+
+
+def fetch_detail_with_pdf(notice_id: str, mi: str = "1026") -> dict:
+    """상세 텍스트 + PDF 텍스트를 함께 반환한다.
+
+    Returns:
+        {"text": str, "pdf_text": str, "pdf_filename": str}
+    """
     list_url = LH_SALE_URL if mi == "1027" else LH_RENTAL_URL
 
     with sync_playwright() as pw:
@@ -121,26 +181,37 @@ def fetch_detail_by_notice_id(notice_id: str, mi: str = "1026") -> str:
 
             link = page.query_selector(f'a.wrtancInfoBtn[data-id1="{notice_id}"]')
             if not link:
-                return ""
+                return {"text": "", "pdf_text": "", "pdf_filename": ""}
 
             link.click()
             page.wait_for_timeout(3000)
 
-            for sel in [".popup_wrap", ".layer_wrap", ".view_wrap", ".detail_wrap",
-                        ".bbs_view", ".cont_wrap", "#content .view", "main"]:
-                el = page.query_selector(sel)
-                if el:
-                    text = el.inner_text().strip()
-                    if len(text) > 200:
-                        return text[:6000]
+            text = _extract_page_text(page)
 
-            return page.inner_text("body").strip()[:6000]
+            # PDF 탐지 & 다운로드
+            pdf_file_ids = _get_pdf_file_ids(page)
+            pdf_text     = ""
+            pdf_filename = ""
+
+            if pdf_file_ids:
+                print(f"  📎 PDF {len(pdf_file_ids)}건 발견, 다운로드 중...", file=sys.stderr)
+                # 공고문 PDF 우선 (첫 번째)
+                pdf_text = _download_pdf_text(page, pdf_file_ids[0])
+
+                # 파일명 추출
+                for a in page.query_selector_all("a[href*='fileDownLoad']"):
+                    name = a.inner_text().strip()
+                    if ".pdf" in name.lower():
+                        pdf_filename = name
+                        break
+
+            return {"text": text, "pdf_text": pdf_text, "pdf_filename": pdf_filename}
         finally:
             browser.close()
 
 
 def fetch_detail(url: str) -> str:
-    """공고 상세 URL에서 notice_id와 mi를 추출해 fetch_detail_by_notice_id를 호출한다."""
+    """공고 상세 URL → 상세 텍스트 반환 (하위 호환)."""
     import re as _re
     notice_m = _re.search(r"wrtancNo=([^&]+)", url)
     mi_m     = _re.search(r"mi=(\d+)", url)
