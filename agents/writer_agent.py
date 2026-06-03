@@ -109,7 +109,7 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     monthly_rent = task.get("monthly_rent", "")
     jeonse_amount = task.get("jeonse_amount", "")
     house_types  = task.get("house_types", "")
-    priority     = task.get("priority", "")
+    first_supply = task.get("first_supply", "")
     conversion   = task.get("conversion", "")
     location_detail = task.get("location_detail", "")
 
@@ -144,7 +144,7 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     if monthly_rent:  fields_summary.append(f"월 임대료: {monthly_rent}")
     if jeonse_amount: fields_summary.append(f"전세금: {jeonse_amount}")
     if house_types:   fields_summary.append(f"주택형: {house_types}")
-    if priority:      fields_summary.append(f"우선공급: {priority}")
+    if first_supply:  fields_summary.append(f"우선공급: {first_supply}")
     if conversion:    fields_summary.append(f"분양전환: {conversion}")
     if location_detail: fields_summary.append(f"위치: {location_detail}")
 

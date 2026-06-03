@@ -274,7 +274,7 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
   "monthly_rent": "월 임대료",
   "jeonse_amount": "전세금 (전세형의 경우)",
   "house_types": "주택형/면적 (예: 36㎡, 46㎡, 59㎡)",
-  "priority": "우선공급 조건 요약",
+  "first_supply": "우선공급 조건 요약",
   "conversion": "분양전환 여부 (예: 10년 후 분양전환 가능, 해당없음)",
   "location_detail": "단지 위치 상세 주소"
 }}"""
@@ -386,7 +386,7 @@ deposit: {fields.get('deposit', '')}
 monthly_rent: {fields.get('monthly_rent', '')}
 jeonse_amount: {fields.get('jeonse_amount', '')}
 house_types: {fields.get('house_types', '')}
-priority: {fields.get('priority', '')}
+first_supply: {fields.get('first_supply', '')}
 conversion: {fields.get('conversion', '')}
 location_detail: {fields.get('location_detail', '')}
 qualifications: |
