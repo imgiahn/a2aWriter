@@ -2,11 +2,11 @@
 Publisher Agent
 
 역할: 초안을 티스토리에 발행
-입력: articles/draft/{task_id}.html + tasks/writing/{task_id}.md
+입력: articles/{blog}/draft/{task_id}.html + blogs/{blog}/tasks/writing/{task_id}.md
 출력: 티스토리 공개 발행
 
-성공 시: tasks/writing/ → tasks/published/
-실패 시: tasks/writing/ → tasks/failed/
+실행: python agents/publisher_agent.py --blog mbtireallove
+      SERVER_MODE=1 python agents/publisher_agent.py --blog mbtireallove
 """
 
 import os
@@ -14,6 +14,7 @@ import re
 import sys
 import time
 import shutil
+import argparse
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
@@ -21,25 +22,39 @@ from playwright.sync_api import sync_playwright, Page, BrowserContext
 
 load_dotenv()
 
-TASKS_WRITING    = Path("tasks/writing")
-TASKS_PUBLISHED  = Path("tasks/published")
-TASKS_FAILED     = Path("tasks/failed")
-ARTICLES_DRAFT   = Path("articles/draft")
-ARTICLES_PUB     = Path("articles/published")
-ARTICLES_SUMMARY = Path("articles/summary")
 BROWSER_DATA_DIR = Path("browser_data")
 
-BLOG_NAME = "mbtireallove"
-BLOG_URL  = f"https://{BLOG_NAME}.tistory.com"
+
+def get_paths(blog: str) -> dict:
+    base = Path(f"blogs/{blog}")
+    return {
+        "tasks_writing":   base / "tasks/writing",
+        "tasks_published": base / "tasks/published",
+        "tasks_failed":    base / "tasks/failed",
+        "articles_draft":  Path(f"articles/{blog}/draft"),
+        "articles_pub":    Path(f"articles/{blog}/published"),
+        "articles_summary": Path(f"articles/{blog}/summary"),
+    }
 
 
-def get_next_task() -> Optional[Path]:
-    tasks = sorted(TASKS_WRITING.glob("*.md"))
+def load_config(blog: str) -> dict:
+    config_path = Path(f"blogs/{blog}/config.md")
+    config = {}
+    if config_path.exists():
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            if ": " in line and not line.startswith("#") and not line.startswith("---"):
+                k, v = line.split(": ", 1)
+                config[k.strip()] = v.strip()
+    return config
+
+
+def get_next_task(tasks_writing: Path) -> Optional[Path]:
+    tasks = sorted(tasks_writing.glob("*.md"))
     return tasks[0] if tasks else None
 
 
-def read_draft(task_id: str) -> tuple:
-    draft   = ARTICLES_DRAFT / f"{task_id}.html"
+def read_draft(task_id: str, articles_draft: Path) -> tuple:
+    draft   = articles_draft / f"{task_id}.html"
     content = draft.read_text(encoding="utf-8")
     m       = re.match(r"<!-- TITLE: (.+?) -->\n?(.*)", content, re.DOTALL)
     title   = m.group(1) if m else task_id
@@ -47,14 +62,13 @@ def read_draft(task_id: str) -> tuple:
     return title, html
 
 
-def is_logged_in(page: Page) -> bool:
-    page.goto(f"{BLOG_URL}/manage", timeout=15000)
+def is_logged_in(page: Page, blog_url: str) -> bool:
+    page.goto(f"{blog_url}/manage", timeout=15000)
     page.wait_for_load_state("networkidle", timeout=10000)
     return "/manage" in page.url and "login" not in page.url
 
 
-def auto_login(page: Page) -> bool:
-    """저장된 쿠키로 카카오 로그인 시도."""
+def auto_login(page: Page, blog_url: str) -> bool:
     email    = os.getenv("KAKAO_EMAIL", "")
     password = os.getenv("KAKAO_PASSWORD", "")
     if not email or not password:
@@ -74,7 +88,7 @@ def auto_login(page: Page) -> bool:
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(2000)
 
-        page.goto(f"{BLOG_URL}/manage", timeout=15000)
+        page.goto(f"{blog_url}/manage", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
         success = "/manage" in page.url and "login" not in page.url
         print(f"  {'✅ 자동 로그인 성공' if success else '❌ 쿠키 만료 → 재인증 필요'}")
@@ -85,18 +99,16 @@ def auto_login(page: Page) -> bool:
         return False
 
 
-def save_summary(task_id: str, html: str):
-    """발행 후 HTML에서 텍스트를 추출해 요약 저장."""
-    ARTICLES_SUMMARY.mkdir(exist_ok=True)
+def save_summary(task_id: str, html: str, articles_summary: Path):
+    articles_summary.mkdir(parents=True, exist_ok=True)
     text = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     preview = text[:500] + ("..." if len(text) > 500 else "")
-    (ARTICLES_SUMMARY / f"{task_id}.txt").write_text(preview, encoding="utf-8")
+    (articles_summary / f"{task_id}.txt").write_text(preview, encoding="utf-8")
 
 
-def reauth(pw) -> Optional[BrowserContext]:
-    """쿠키 만료 시 headless 재인증. 폰 카카오 앱 승인 필요."""
+def reauth(pw, blog_url: str) -> Optional[BrowserContext]:
     email    = os.getenv("KAKAO_EMAIL", "")
     password = os.getenv("KAKAO_PASSWORD", "")
 
@@ -145,7 +157,7 @@ def reauth(pw) -> Optional[BrowserContext]:
                 context.close()
                 return None
 
-        page.goto(f"{BLOG_URL}/manage", timeout=15000)
+        page.goto(f"{blog_url}/manage", timeout=15000)
         page.wait_for_load_state("networkidle")
         if "/manage" in page.url and "login" not in page.url:
             print("  ✅ 재인증 완료 — 쿠키 저장됨")
@@ -160,8 +172,8 @@ def reauth(pw) -> Optional[BrowserContext]:
         return None
 
 
-def post_article(page: Page, title: str, content: str):
-    page.goto(f"{BLOG_URL}/manage/newpost/", timeout=20000)
+def post_article(page: Page, blog_url: str, title: str, content: str):
+    page.goto(f"{blog_url}/manage/newpost/", timeout=20000)
     page.wait_for_load_state("networkidle", timeout=20000)
     page.wait_for_timeout(2000)
 
@@ -223,20 +235,27 @@ def post_article(page: Page, title: str, content: str):
     page.wait_for_timeout(3000)
 
 
-def run():
+def run(blog: str):
     print("=" * 50)
-    print("Publisher Agent")
+    print(f"Publisher Agent — {blog}")
     print("=" * 50)
 
-    task_file = get_next_task()
+    config   = load_config(blog)
+    blog_url = config.get("blog_url", f"https://{blog}.tistory.com")
+    paths    = get_paths(blog)
+
+    for p in paths.values():
+        p.mkdir(parents=True, exist_ok=True)
+
+    task_file = get_next_task(paths["tasks_writing"])
     if not task_file:
-        print("발행할 Task 없음 (tasks/writing/ 가 비어있음)")
+        print(f"발행할 Task 없음 ({paths['tasks_writing']})")
         return
 
     task_id = task_file.stem
     print(f"Task: {task_id}")
 
-    title, html = read_draft(task_id)
+    title, html = read_draft(task_id, paths["articles_draft"])
     print(f"제목: {title}")
 
     BROWSER_DATA_DIR.mkdir(exist_ok=True)
@@ -248,37 +267,39 @@ def run():
         )
         page = context.new_page()
 
-        if not is_logged_in(page):
+        if not is_logged_in(page, blog_url):
             print("  로그인 필요 → 자동 로그인 시도...")
-            if not auto_login(page):
-                # 쿠키 만료 → 재인증
+            if not auto_login(page, blog_url):
                 print("  재인증 시작...")
                 context.close()
-                context = reauth(pw)
+                context = reauth(pw, blog_url)
                 if not context:
                     print("❌ 재인증 실패.")
-                    shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
+                    shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
                     return
                 page = context.new_page()
-                if not is_logged_in(page):
+                if not is_logged_in(page, blog_url):
                     print("❌ 로그인 실패.")
                     context.close()
-                    shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
+                    shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
                     return
 
         try:
-            post_article(page, title, html)
-            shutil.move(str(task_file), str(TASKS_PUBLISHED / task_file.name))
-            draft = ARTICLES_DRAFT / f"{task_id}.html"
-            shutil.copy(str(draft), str(ARTICLES_PUB / f"{task_id}.html"))
-            save_summary(task_id, html)
+            post_article(page, blog_url, title, html)
+            shutil.move(str(task_file), str(paths["tasks_published"] / task_file.name))
+            draft_src = paths["articles_draft"] / f"{task_id}.html"
+            shutil.copy(str(draft_src), str(paths["articles_pub"] / f"{task_id}.html"))
+            save_summary(task_id, html, paths["articles_summary"])
             print(f"✅ 발행 완료 → tasks/published/")
         except Exception as e:
-            shutil.move(str(task_file), str(TASKS_FAILED / task_file.name))
+            shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
             print(f"❌ 발행 실패: {e} → tasks/failed/")
         finally:
             context.close()
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--blog", required=True, help="블로그 이름 (blogs/ 하위 폴더명)")
+    args = parser.parse_args()
+    run(args.blog)
