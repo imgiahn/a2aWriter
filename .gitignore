@@ -14,8 +14,11 @@ daily_log.json
 browser_data/
 
 # 생성된 HTML 초안/발행본 (대용량)
-articles/draft/
-articles/published/
+articles/*/draft/
+articles/*/published/
+
+# 실험/폐쇄된 시스템 잔재
+claude2/
 
 # 디버그 스크린샷
 *.png
