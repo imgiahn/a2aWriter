@@ -219,166 +219,110 @@ def mbti_run(paths: dict):
 
 
 # ─────────────────────────────────────────────
-# llmenginehistory 전용 로직 (청약 분석)
+# llmenginehistory 전용 로직 (LH 청약 공고 해설)
 # ─────────────────────────────────────────────
 
-def fetch_cheongyak_list() -> list[dict]:
-    """청약홈에서 서울/경기 청약 공고를 수집한다."""
-    import requests
-    from bs4 import BeautifulSoup
-
-    results = []
-    target_regions = {"서울", "경기"}
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://www.applyhome.co.kr/",
-    }
-
-    try:
-        # 청약홈 진행 중 공고 목록 AJAX
-        url  = "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancList.do"
-        data = {
-            "orderBy":    "RCRIT_PBLANC_DE",
-            "region":     "02",  # 전체 조회 후 필터링
-            "houseSecd":  "01",  # APT
-            "rentSecd":   "0",   # 분양
-            "searchRangeYn": "N",
-        }
-        resp = requests.post(url, data=data, headers=headers, timeout=10)
-        resp.raise_for_status()
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-        rows = soup.select("table tbody tr")
-
-        for row in rows:
-            cols = row.select("td")
-            if len(cols) < 6:
-                continue
-
-            region = cols[1].get_text(strip=True)
-            if not any(r in region for r in target_regions):
-                continue
-
-            name          = cols[2].get_text(strip=True)
-            rcrit_de      = cols[3].get_text(strip=True)  # 청약 접수일
-            pblanc_url    = row.select_one("a")
-            detail_url    = ("https://www.applyhome.co.kr" + pblanc_url["href"]
-                             if pblanc_url and pblanc_url.get("href") else "")
-
-            results.append({
-                "name":      name,
-                "region":    region,
-                "rcrit_de":  rcrit_de,
-                "detail_url": detail_url,
-            })
-
-    except Exception as e:
-        print(f"  ⚠️  청약홈 스크래핑 오류: {e}")
-
-    return results
-
-
-def fetch_cheongyak_detail(detail_url: str) -> dict:
-    """청약 공고 상세 페이지에서 핵심 정보를 추출한다."""
-    if not detail_url:
-        return {}
-
-    import requests
-    from bs4 import BeautifulSoup
-
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    detail  = {}
-
-    try:
-        resp = requests.get(detail_url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        # 공급 규모 테이블에서 정보 추출
-        for row in soup.select("table tr"):
-            cols = [td.get_text(strip=True) for td in row.select("th, td")]
-            if len(cols) >= 2:
-                key = cols[0]
-                val = cols[1]
-                if "총" in key and "세대" in key:
-                    detail["total_units"] = val
-                if "분양가" in key:
-                    detail["price"] = val
-                if "입주" in key and "예정" in key:
-                    detail["move_in"] = val
-
-    except Exception as e:
-        print(f"  ⚠️  상세 페이지 오류: {e}")
-
-    return detail
+def get_existing_notice_ids(blog: str) -> set:
+    """이미 처리된 공고번호 세트를 반환한다 (중복 방지)."""
+    ids = set()
+    base = Path(f"blogs/{blog}/tasks")
+    for folder in ["planned", "writing", "published", "failed"]:
+        for f in (base / folder).glob("*.md"):
+            text = f.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if line.startswith("notice_id:"):
+                    ids.add(line.split(":", 1)[1].strip())
+                    break
+    return ids
 
 
 def cheongyak_run(paths: dict):
+    from tools.lh_scraper import scrape
+
     print("=" * 50)
-    print("Planner Agent — llmenginehistory (청약 분석)")
+    print("Planner Agent — llmenginehistory (LH 청약 공고)")
     print("=" * 50)
 
-    existing_topics = get_existing_topics("llmenginehistory")
-    print("청약홈 서울/경기 공고 수집 중...")
+    existing_ids = get_existing_notice_ids("llmenginehistory")
+    print(f"기존 처리 공고: {len(existing_ids)}건")
+    print("LH 청약플러스 서울/경기 공고 수집 중...")
 
-    announcements = fetch_cheongyak_list()
+    announcements = scrape()
     if not announcements:
-        print("⚠️  수집된 공고 없음 (청약홈 응답 오류 또는 진행 중 청약 없음)")
+        print("⚠️  수집된 공고 없음")
         return
 
-    print(f"  총 {len(announcements)}건 수집")
+    print(f"수집: {len(announcements)}건")
 
     created = 0
     for item in announcements:
-        topic = f"{item['region']} {item['name']} 청약 분석"
+        notice_id   = item.get("notice_id", "")
+        notice_name = item.get("notice_name", "")
+        supply_type = item.get("supply_type", "")
+        region      = item.get("region", "")
+        notice_date = item.get("notice_date", "")
+        detail_url  = item.get("detail_url", "")
 
-        if topic in existing_topics:
-            print(f"  스킵 (중복): {topic}")
+        if not notice_name or not detail_url:
             continue
 
-        detail = fetch_cheongyak_detail(item.get("detail_url", ""))
+        # 공고번호로 중복 체크 (없으면 공고명으로)
+        dedup_key = notice_id or notice_name
+        if dedup_key in existing_ids:
+            print(f"  스킵 (중복): {notice_name}")
+            continue
 
-        outline = f"""## 청약 공고 정보
+        topic   = f"{notice_name} 청약 공고 해설"
+        outline = f"""## 공고 정보
 
-- 단지명: {item['name']}
-- 위치: {item['region']}
-- 청약 접수일: {item['rcrit_de']}
-- 총 세대수: {detail.get('total_units', '확인 필요')}
-- 분양가: {detail.get('price', '확인 필요')}
-- 입주 예정: {detail.get('move_in', '확인 필요')}
-- 공고 링크: {item.get('detail_url', '')}
+- 공고명: {notice_name}
+- 공고번호: {notice_id}
+- 공급유형: {supply_type}
+- 지역: {region}
+- 공고일: {notice_date}
+- 상세URL: {detail_url}
 
 ## 작성 방향
 
-writing_guide.md의 청약 분석 구조에 따라 작성:
-1. 단지 기본 정보 표
-2. 청약 일정 정리
-3. 입지 분석 (교통/학군/편의시설)
-4. 분양가 vs 주변 시세 분석
-5. 청약 자격 & 전략 요약
-6. 한줄 총평 + 별점
+writing_guide.md의 공고 해설 구조에 따라 작성.
+상세URL 페이지를 분석해 공고 내용을 독자가 쉽게 이해할 수 있도록 해설한다.
+투자 분석, 분양가 평가 등 고급 분석은 제외하고
+"이 공고가 무슨 내용인지" 설명에 집중한다.
 """
 
         task_id = get_next_task_id(paths["planned"])
-        create_task(
-            folder       = paths["planned"],
-            task_id      = task_id,
-            topic        = topic,
-            series       = "청약분석",
-            priority     = "high",
-            template     = "default",
-            content_type = "단편",
-            parts        = 1,
-            outline      = outline,
-        )
-        print(f"  📋 Task 생성: {task_id} — {topic}")
+        # frontmatter에 공고 메타 추가
+        folder = paths["planned"]
+        folder.mkdir(parents=True, exist_ok=True)
+        content = f"""---
+task_id: {task_id}
+status: planned
+topic: {topic}
+series: 청약공고해설
+priority: high
+template: default
+type: 단편
+parts: 1
+notice_id: {notice_id}
+notice_name: {notice_name}
+supply_type: {supply_type}
+region: {region}
+notice_date: {notice_date}
+detail_url: {detail_url}
+created_by: planner_agent
+created_at: {date.today().isoformat()}
+---
+
+{outline}
+"""
+        (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
+        print(f"  📋 Task 생성: {task_id} — {notice_name}")
         created += 1
 
     if created == 0:
-        print("새로 추가할 청약 공고 없음 (모두 기존 Task 존재)")
+        print("새 공고 없음 (모두 기존 Task 존재)")
     else:
-        print(f"\n✅ {created}개 청약 분석 Task 생성 완료")
+        print(f"\n✅ {created}개 Task 생성 완료")
 
 
 # ─────────────────────────────────────────────
