@@ -9,6 +9,7 @@ LH 청약플러스 스크래퍼
 import sys
 import json
 import argparse
+from typing import Optional, List, Tuple
 from playwright.sync_api import sync_playwright, Page
 
 LH_LIST_URL = "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do"
@@ -77,7 +78,7 @@ def fetch_list(region_code: str, page: Page) -> list[dict]:
     return results
 
 
-def parse_announcement(raw: dict) -> dict | None:
+def parse_announcement(raw: dict) -> Optional[dict]:
     """raw_cells에서 공고 정보를 구조화한다."""
     cells = raw.get("raw_cells", [])
     detail_url = raw.get("detail_url", "")
@@ -136,7 +137,7 @@ def fetch_detail(url: str, page: Page) -> str:
     return page.inner_text("body").strip()
 
 
-def scrape(regions=None, max_per_region: int = 20) -> list[dict]:
+def scrape(regions=None, max_per_region: int = 20) -> List[dict]:
     """서울+경기 공고 목록을 수집하고 구조화된 결과를 반환한다."""
     regions = regions or list(REGION_CODES.items())
     announcements = []

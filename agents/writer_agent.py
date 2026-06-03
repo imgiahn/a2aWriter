@@ -96,7 +96,7 @@ def fetch_lh_detail_text(url: str) -> str:
         return ""
 
 
-def generate_lh_content(task: dict, writing_guide: Path) -> tuple[str, str]:
+def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     """LH 청약 공고 해설 콘텐츠를 생성한다."""
     notice_name = task.get("notice_name", task.get("topic", ""))
     supply_type = task.get("supply_type", "")
@@ -157,7 +157,7 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple[str, str]:
     return title, html
 
 
-def generate_content(task: dict, writing_guide: Path) -> tuple[str, str]:
+def generate_content(task: dict, writing_guide: Path) -> tuple:
     topic    = task.get("topic", "")
     series   = task.get("series", "")
     body     = task.get("_body", "")
