@@ -237,6 +237,8 @@ def get_existing_notice_ids(blog: str) -> set:
 
 
 def cheongyak_run(paths: dict):
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from tools.lh_scraper import scrape
 
     print("=" * 50)
