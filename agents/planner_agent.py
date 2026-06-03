@@ -222,8 +222,75 @@ def mbti_run(paths: dict):
 # llmenginehistory 전용 로직 (LH 청약 공고 해설)
 # ─────────────────────────────────────────────
 
+SUPPLY_TO_CATEGORY = {
+    "국민임대":       "national_rental",
+    "영구임대":       "permanent_rental",
+    "행복주택":       "happy_housing",
+    "매입임대":       "jeonse",
+    "든든전세":       "jeonse",
+    "공공임대":       "public_rental_10y",
+    "통합공공임대":   "integrated_public_rental",
+    "분양전환":       "purchase_rental",
+    "공공분양":       "sale",
+    "분양주택":       "sale",
+}
+
+
+def get_housing_category(supply_type: str) -> str:
+    for key, cat in SUPPLY_TO_CATEGORY.items():
+        if key in supply_type:
+            return cat
+    return "general"
+
+
+def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
+    """공고 상세 텍스트에서 구조화 데이터를 GPT로 추출한다."""
+    if not detail_text:
+        return {}
+
+    prompt = f"""아래 LH 청약 공고 텍스트에서 정보를 추출하세요.
+정보가 없으면 빈 문자열로 두세요. JSON만 출력하세요.
+
+공급유형: {supply_type}
+
+공고 텍스트:
+{detail_text[:4000]}
+
+{{
+  "total_units": "총 공급세대수 (예: 50세대)",
+  "apply_start": "신청 시작일 YYYY.MM.DD",
+  "apply_end": "신청 마감일 YYYY.MM.DD",
+  "result_date": "당첨자 발표일 YYYY.MM.DD",
+  "move_in": "입주 예정일",
+  "supply_target": "공급 대상 (예: 무주택세대구성원)",
+  "qualifications": "신청 자격 핵심 요약 (3줄 이내)",
+  "deposit": "보증금 (임대의 경우)",
+  "monthly_rent": "월 임대료",
+  "jeonse_amount": "전세금 (전세형의 경우)",
+  "house_types": "주택형/면적 (예: 36㎡, 46㎡, 59㎡)",
+  "priority": "우선공급 조건 요약",
+  "conversion": "분양전환 여부 (예: 10년 후 분양전환 가능, 해당없음)",
+  "location_detail": "단지 위치 상세 주소"
+}}"""
+
+    try:
+        resp = azure_client.chat.completions.create(
+            model=DEPLOYMENT,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_completion_tokens=800,
+        )
+        raw = resp.choices[0].message.content.strip()
+        import json as _json, re as _re
+        m = _re.search(r"\{[\s\S]*\}", raw)
+        if m:
+            return _json.loads(m.group())
+    except Exception as e:
+        print(f"  ⚠️  필드 추출 오류: {e}")
+    return {}
+
+
 def get_existing_notice_ids(blog: str) -> set:
-    """이미 처리된 공고번호 세트를 반환한다 (중복 방지)."""
     ids = set()
     base = Path(f"blogs/{blog}/tasks")
     for folder in ["planned", "writing", "published", "failed"]:
@@ -237,9 +304,9 @@ def get_existing_notice_ids(blog: str) -> set:
 
 
 def cheongyak_run(paths: dict):
-    import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from tools.lh_scraper import scrape
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.lh_scraper import scrape, fetch_detail
 
     print("=" * 50)
     print("Planner Agent — llmenginehistory (LH 청약 공고)")
@@ -268,57 +335,59 @@ def cheongyak_run(paths: dict):
         if not notice_name or not detail_url:
             continue
 
-        # 공고번호로 중복 체크 (없으면 공고명으로)
         dedup_key = notice_id or notice_name
         if dedup_key in existing_ids:
             print(f"  스킵 (중복): {notice_name}")
             continue
 
-        topic   = f"{notice_name} 청약 공고 해설"
-        outline = f"""## 공고 정보
-
-- 공고명: {notice_name}
-- 공고번호: {notice_id}
-- 공급유형: {supply_type}
-- 지역: {region}
-- 공고일: {notice_date}
-- 상세URL: {detail_url}
-
-## 작성 방향
-
-writing_guide.md의 공고 해설 구조에 따라 작성.
-상세URL 페이지를 분석해 공고 내용을 독자가 쉽게 이해할 수 있도록 해설한다.
-투자 분석, 분양가 평가 등 고급 분석은 제외하고
-"이 공고가 무슨 내용인지" 설명에 집중한다.
-"""
+        # 상세 페이지 크롤링 + 구조화 추출
+        print(f"  상세 수집 중: {notice_name[:30]}...")
+        detail_text = fetch_detail(detail_url)
+        fields      = extract_notice_fields(detail_text, supply_type)
+        category    = get_housing_category(supply_type)
 
         task_id = get_next_task_id(paths["planned"])
-        # frontmatter에 공고 메타 추가
-        folder = paths["planned"]
+        folder  = paths["planned"]
         folder.mkdir(parents=True, exist_ok=True)
+
         content = f"""---
 task_id: {task_id}
 status: planned
-topic: {topic}
+topic: {notice_name} 공고 해설
 series: 청약공고해설
 priority: high
-template: default
+template: {category}
 type: 단편
 parts: 1
 notice_id: {notice_id}
 notice_name: {notice_name}
 supply_type: {supply_type}
+housing_category: {category}
 region: {region}
 notice_date: {notice_date}
+deadline: {item.get('deadline', '')}
 detail_url: {detail_url}
+total_units: {fields.get('total_units', '')}
+apply_start: {fields.get('apply_start', '')}
+apply_end: {fields.get('apply_end', '')}
+result_date: {fields.get('result_date', '')}
+move_in: {fields.get('move_in', '')}
+supply_target: {fields.get('supply_target', '')}
+deposit: {fields.get('deposit', '')}
+monthly_rent: {fields.get('monthly_rent', '')}
+jeonse_amount: {fields.get('jeonse_amount', '')}
+house_types: {fields.get('house_types', '')}
+priority: {fields.get('priority', '')}
+conversion: {fields.get('conversion', '')}
+location_detail: {fields.get('location_detail', '')}
+qualifications: |
+  {fields.get('qualifications', '').replace(chr(10), chr(10) + '  ')}
 created_by: planner_agent
 created_at: {date.today().isoformat()}
 ---
-
-{outline}
 """
         (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
-        print(f"  📋 Task 생성: {task_id} — {notice_name}")
+        print(f"  📋 Task 생성: {task_id} — [{category}] {notice_name[:30]}")
         created += 1
 
     if created == 0:

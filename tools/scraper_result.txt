@@ -1,0 +1,102 @@
+﻿python : LH û���÷��� ����+��� ���� ���� ��...
+At line:1 char:38
++ ... Users\user\Downloads\claude"; python tools/lh_scraper.py 2>&1 | Out-F ...
++                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (LH û���÷��� ����+��� ���� ���� ��...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  �� 50�� �߰�
+
+�� 9��
+[
+  {
+    "notice_id": "2015122300020029",
+    "notice_name": "[��Ⳳ�α� ��õ�ι� �����Ӵ����� ���������� ����(2026.05.29.)",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.29",
+    "deadline": "2026.06.11",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300020029&mi=1026"
+  },
+  {
+    "notice_id": "0000061104",
+    "notice_name": "���ֿ���3 A12BL(�ؿ���12) 10�� �����Ӵ����ø��� ���������ڸ���(������)",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.28",
+    "deadline": "2026.06.09",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=0000061104&mi=1026"
+  },
+  {
+    "notice_id": "2015122300020024",
+    "notice_name": "[������������] ���ڳ� �����Ӵ����� ���������� ��������",
+    "supply_type": "�����Ӵ�",
+    "region": "����Ư����",
+    "notice_date": "2026.05.27",
+    "deadline": "2026.06.10",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300020024&mi=1026"
+  },
+  {
+    "notice_id": "2015122300019992",
+    "notice_name": "[������������] 26�� 1�� ��о���ȯ�� ����������� ������ ��������",
+    "supply_type": "�����Ӵ�",
+    "region": "����Ư����",
+    "notice_date": "2026.05.22",
+    "deadline": "2026.06.04",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300019992&mi=1026"
+  },
+  {
+    "notice_id": "2015122300019891",
+    "notice_name": "[��Ⳳ��] 2026�� ������� �����Ӵ����� ���������� ��������",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.21",
+    "deadline": "2026.06.04",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300019891&mi=1026"
+  },
+  {
+    "notice_id": "2015122300019987",
+    "notice_name": "[���Ϻ�] 26�� 1�� ������ �о���ȯ�� ����������� ������ ��������",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.21",
+    "deadline": "2026.06.04",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300019987&mi=1026"
+  },
+  {
+    "notice_id": "2015122300019902",
+    "notice_name": "[���Ϻ�] 26�� 1�� ������ �о���ȯ�� ����������� ������ ��������(����������)",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.21",
+    "deadline": "2026.06.04",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300019902&mi=1026"
+  },
+  {
+    "notice_id": "2015122300019989",
+    "notice_name": "[���Ϻ�] 26�� 1�� ��о���ȯ�� ����������� ������ ��������",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.21",
+    "deadline": "2026.06.04",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300019989&mi=1026"
+  },
+  {
+    "notice_id": "2015122300020019",
+    "notice_name": "�Ⱦ�� �����Ӵ����� ���������� ��������(2026.05.21.)",
+    "supply_type": "�����Ӵ�",
+    "region": "��⵵",
+    "notice_date": "2026.05.21",
+    "deadline": "2026.06.12",
+    "status": "������",
+    "detail_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo=2015122300020019&mi=1026"
+  }
+]

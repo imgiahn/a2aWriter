@@ -64,78 +64,111 @@ def get_next_task(tasks_planned: Path) -> Optional[Path]:
     return tasks[0] if tasks else None
 
 
-def fetch_lh_detail_text(url: str) -> str:
-    """LH 공고 상세 페이지 텍스트를 Playwright로 추출한다."""
-    if not url:
-        return ""
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.set_extra_http_headers({
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            })
-            page.goto(url, timeout=20000)
-            page.wait_for_load_state("networkidle", timeout=15000)
+CATEGORY_FOCUS = {
+    "national_rental": "월임대료·보증금 수준, 소득 기준 핵심, 예비입주자 특성(대기 개념)",
+    "permanent_rental": "극저소득층 대상, 소득·자산 기준이 핵심, 입주 조건 엄격",
+    "happy_housing": "청년·신혼부부 특화, 거주기간 제한, 소득 기준, 면적 제한",
+    "jeonse":        "든든전세·매입임대 특성, 전세금 수준, 일반 전세 대비 차이점",
+    "public_rental_10y": "10년 공공임대 특성, 분양전환 여부, 리츠 구조면 언급",
+    "integrated_public_rental": "통합공공임대 특성, 소득 구간별 임대료 차등, 유형 전환 가능성",
+    "purchase_rental": "분양전환 일정, 전환 가격 산정 방식, 실질 내 집 마련 가능성",
+    "sale":           "분양가, 청약 자격, 가점·추첨 비율, 계약 일정",
+    "general":        "공고 핵심 조건, 신청 자격, 일정",
+}
 
-            # 본문 영역 우선 추출
-            for selector in [".view_wrap", ".detail_wrap", ".cont_wrap", "#content", "main"]:
-                el = page.query_selector(selector)
-                if el:
-                    text = el.inner_text()
-                    if len(text) > 200:
-                        browser.close()
-                        return text.strip()[:5000]
 
-            text = page.inner_text("body").strip()[:5000]
-            browser.close()
-            return text
-    except Exception as e:
-        print(f"  ⚠️  상세 페이지 로드 실패: {e}")
-        return ""
+def _load_category_guide(blog: str, category: str) -> str:
+    guide_path = Path(f"blogs/{blog}/guides/{category}.md")
+    if guide_path.exists():
+        return guide_path.read_text(encoding="utf-8")
+    # 공통 가이드로 폴백
+    common = Path(f"blogs/{blog}/writing_guide.md")
+    return common.read_text(encoding="utf-8") if common.exists() else ""
 
 
 def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
-    """LH 청약 공고 해설 콘텐츠를 생성한다."""
-    notice_name = task.get("notice_name", task.get("topic", ""))
-    supply_type = task.get("supply_type", "")
-    region      = task.get("region", "")
-    notice_date = task.get("notice_date", "")
-    notice_id   = task.get("notice_id", "")
-    detail_url  = task.get("detail_url", "")
-    guide       = writing_guide.read_text(encoding="utf-8") if writing_guide.exists() else ""
+    """LH 청약 공고 해설 콘텐츠를 생성한다 (task 데이터만 사용)."""
+    notice_name  = task.get("notice_name", task.get("topic", ""))
+    supply_type  = task.get("supply_type", "")
+    category     = task.get("template", "general")   # housing_category
+    region       = task.get("region", "")
+    notice_date  = task.get("notice_date", "")
+    deadline     = task.get("deadline", "")
+    notice_id    = task.get("notice_id", "")
+    detail_url   = task.get("detail_url", "")
 
-    print(f"  상세 페이지 수집 중: {detail_url}")
-    detail_text = fetch_lh_detail_text(detail_url)
+    # task에서 추출된 구조화 데이터
+    total_units  = task.get("total_units", "")
+    apply_start  = task.get("apply_start", "")
+    apply_end    = task.get("apply_end", "") or deadline
+    result_date  = task.get("result_date", "")
+    move_in      = task.get("move_in", "")
+    supply_target = task.get("supply_target", "")
+    qualifications = task.get("qualifications", "")
+    deposit      = task.get("deposit", "")
+    monthly_rent = task.get("monthly_rent", "")
+    jeonse_amount = task.get("jeonse_amount", "")
+    house_types  = task.get("house_types", "")
+    priority     = task.get("priority", "")
+    conversion   = task.get("conversion", "")
+    location_detail = task.get("location_detail", "")
+
+    blog_name = "llmenginehistory"
+    guide = _load_category_guide(blog_name, category)
+    focus = CATEGORY_FOCUS.get(category, CATEGORY_FOCUS["general"])
 
     system_prompt = (
-        "당신은 부동산/청약 정보를 쉽게 설명해주는 블로그 작가입니다.\n"
-        "아래 작성 가이드를 반드시 따라 HTML 형식으로만 출력합니다.\n\n"
+        "당신은 청약 정보를 전문적으로 해설하는 블로그 작가입니다.\n"
+        "독자는 청약에 관심 있는 사람으로, LH·청약·국민임대 등 기본 개념은 알고 있습니다.\n"
+        "기본 개념 설명 없이 이번 공고에만 집중해서 작성하세요.\n\n"
+        "절대 금지 표현:\n"
+        "- '공고문을 확인하세요', '알아보겠습니다', '살펴보겠습니다'\n"
+        "- LH가 무엇인지, 청약이 무엇인지, 국민임대가 무엇인지 설명\n\n"
+        "반드시 포함:\n"
+        "- '누가 보면 좋은 공고인지' 명확하게 작성\n"
+        f"- 이 공고 유형({supply_type})의 핵심 포인트: {focus}\n\n"
+        "작성 가이드:\n"
         f"{guide}"
     )
 
-    user_prompt = f"""아래 LH 청약 공고를 독자가 쉽게 이해할 수 있도록 해설하는 블로그 글을 작성해주세요.
+    # 필드 요약 (없는 항목은 생략)
+    fields_summary = []
+    if total_units:   fields_summary.append(f"총 세대수: {total_units}")
+    if apply_start:   fields_summary.append(f"신청 시작: {apply_start}")
+    if apply_end:     fields_summary.append(f"신청 마감: {apply_end}")
+    if result_date:   fields_summary.append(f"당첨 발표: {result_date}")
+    if move_in:       fields_summary.append(f"입주 예정: {move_in}")
+    if supply_target: fields_summary.append(f"공급 대상: {supply_target}")
+    if qualifications:fields_summary.append(f"신청 자격: {qualifications}")
+    if deposit:       fields_summary.append(f"보증금: {deposit}")
+    if monthly_rent:  fields_summary.append(f"월 임대료: {monthly_rent}")
+    if jeonse_amount: fields_summary.append(f"전세금: {jeonse_amount}")
+    if house_types:   fields_summary.append(f"주택형: {house_types}")
+    if priority:      fields_summary.append(f"우선공급: {priority}")
+    if conversion:    fields_summary.append(f"분양전환: {conversion}")
+    if location_detail: fields_summary.append(f"위치: {location_detail}")
 
-## 공고 기본 정보
+    user_prompt = f"""다음 LH 청약 공고를 해설하는 블로그 글을 HTML로 작성해주세요.
+
+## 공고 정보
 - 공고명: {notice_name}
-- 공고번호: {notice_id}
-- 공급유형: {supply_type}
+- 공급유형: {supply_type} (카테고리: {category})
 - 지역: {region}
 - 공고일: {notice_date}
-- 출처: {detail_url}
+- 공고번호: {notice_id}
+- 원문: {detail_url}
 
-## 공고 상세 내용 (원문)
-{detail_text if detail_text else "상세 내용을 가져오지 못했습니다. 공고 기본 정보만으로 작성해주세요."}
+## 추출된 공고 데이터
+{chr(10).join(fields_summary) if fields_summary else "데이터 추출 미완료 — 공고명과 지역 기반으로 작성"}
 
 ---
 
-맨 첫 줄에 부제목을 넣어주세요:
-<!-- SUBTITLE: [부제목] -->
+맨 첫 줄에 부제목:
+<!-- SUBTITLE: [이 공고의 핵심을 한 줄로] -->
 
-이후 writing_guide의 구조대로 HTML 본문을 작성해주세요.
-투자 분석, 분양가 평가 등 고급 분석은 하지 말고
-"이 공고가 무슨 내용인지" 해설에만 집중해주세요."""
+이후 가이드 구조대로 HTML 본문 작성.
+데이터가 없는 항목은 억측하지 말고 해당 항목을 자연스럽게 생략.
+반드시 마지막에 "이런 분께 추천" 문단 포함."""
 
     resp = azure_client.chat.completions.create(
         model=DEPLOYMENT,

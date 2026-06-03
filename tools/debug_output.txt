@@ -1,0 +1,17 @@
+﻿���� ������ �ε� ��...
+���� ��� ������ �̵� ��... (mi=1026)
+
+API ����� (1��):
+
+[https://apply.lh.or.kr/lhapply/apply/selectSbscScd.do]
+python : Traceback (most recent call last):
+At line:1 char:38
++ ... :\Users\user\Downloads\claude"; python tools/debug_lh.py 2>&1 | Out-F ...
++                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\user\Downloads\claude\tools\debug_lh.py", line 46, in <module>
+    print(body[:500])
+    ~~~~~^^^^^^^^^^^^
+UnicodeEncodeError: 'cp949' codec can't encode character '\xec' in position 310: illegal multibyte sequence

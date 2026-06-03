@@ -1,0 +1,94 @@
+{
+  "api_responses": {
+    "https://apply.lh.or.kr/lhapply/apply/selectSbscScd.do": "{\"xssChk\":\"N\",\"calCnt\":{\"type01\":\"13\",\"type02\":\"0\",\"type03\":\"1\",\"type04\":\"9\",\"type05\":\"0\"},\"resultAt\":\"Y\",\"calSrchDay\":\"\",\"pzwrCnt\":{\"type01\":\"0\",\"type02\":\"0\",\"type03\":\"0\",\"type04\":\"0\",\"type05\":\"0\"},\"calPrevDay\":\"\",\"calSrchType\":\"\",\"selectMonth\":\"06\",\"netBgn\":\"\",\"selectDay\":\"03\",\"selectYear\":\"2026\",\"mssage\":\"ì˜¤ë¥˜ê°€ ë°œìƒí•˜ì˜€ìŠµë‹ˆë‹¤.\\nê´€ë¦¬ìžì—ê²Œ ë¬¸ì˜í•˜ì„¸ìš”.\",\"calNextDay\":\"\"}"
+  },
+  "xhr_calls": [
+    {
+      "url": "https://apply.lh.or.kr/lhapply/apply/selectSbscScd.do",
+      "method": "POST",
+      "post_data": "selectYear=2026&selectMonth=06&selectDay=03&calSrchType=&calSrchDay=&calNextDay=&calPrevDay=&netBgn="
+    }
+  ],
+  "first_row_html": "\n\t\t\t\t\t\t\t\t\t<td>58</td>\n\n\t\t\t\t\t\t\t\t\t<td class=\"mVw cate col1\">국민임대</td>\n\t\t\t\t\t\t\t\t\t<td class=\"mVw bbs_tit\">\n\t\t\t\t\t\t\t\t\t\t<a href=\"javascript:\" data-id1=\"2015122300020056\" data-id2=\"03\" data-id3=\"06\" data-id4=\"07\" class=\"wrtancInfoBtn\">\n\t\t\t\t\t\t\t\t\t\t\t<!-- 새글 일때 : new, n일 일때 : date -->\n\t\t\t\t\t\t\t\t\t\t\t<span>[정정공고]부도임대(경주금장로얄) 국민임대주택 입주자 최초 모집 <em class=\"day\">1일전</em></span>\n\t\t\t\t\t\t\t\t\t\t</a>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t\t<td class=\"mVw cate col2\">경상북도</td>\n\t\t\t\t\t\t\t\t\t<td class=\"mVw\">\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t\t\t<a href=\"javascript:\" class=\"listFileDown tbl_web2\" data-id1=\"06\" data-id2=\"07\" data-id3=\"03\" data-id4=\"\" data-id5=\"2015122300020056\">\n\t\t\t\t\t\t\t\t\t\t\t\t<img src=\"/images/co/na/down_icon.gif\" alt=\"첨부파일 있음\">\n\t\t\t\t\t\t\t\t\t\t\t</a>\n\t\t\t\t\t\t\t\t\t\t\t<p class=\"file tbl_mob2\"><em class=\"hid\">첨부파일 있음</em></p>\n\t\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t\t<td>2026.06.02</td>\n\t\t\t\t\t\t\t\t\t<td>2026.06.18</td>\n\t\t\t\t\t\t\t\t\t<td class=\"mVw stt noti\">공고중</td>\n\t\t\t\t\t\t\t\t\t<td>2,197</td>\n\t\t\t\t\t\t\t\t",
+  "first_row_cells": [
+    "58",
+    "국민임대",
+    "[정정공고]부도임대(경주금장로얄) 국민임대주택 입주자 최초 모집",
+    "경상북도",
+    "",
+    "2026.06.02",
+    "2026.06.18",
+    "공고중",
+    "2,197"
+  ],
+  "after_click_url": "https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do?mi=1026",
+  "click_xhrs": [],
+  "click_responses": {},
+  "table_sample": [
+    {
+      "cells": [
+        "58",
+        "국민임대",
+        "[정정공고]부도임대(경주금장로얄) 국민임대주택 입주자 최초 모집",
+        "경상북도",
+        "",
+        "2026.06.02",
+        "2026.06.18",
+        "공고중",
+        "2,197"
+      ]
+    },
+    {
+      "cells": [
+        "57",
+        "국민임대",
+        "부도임대(경주금장로얄) 국민임대주택 입주자 최초 모집",
+        "경상북도",
+        "",
+        "2026.05.29",
+        "2026.06.18",
+        "정정공고중",
+        "8,882"
+      ]
+    },
+    {
+      "cells": [
+        "56",
+        "국민임대",
+        "[경기남부권 이천부발 국민임대주택 예비입주자 모집(2026.05.29.)",
+        "경기도",
+        "",
+        "2026.05.29",
+        "2026.06.11",
+        "공고중",
+        "21,591"
+      ]
+    },
+    {
+      "cells": [
+        "55",
+        "영구임대",
+        "경주용강 영구임대주택 예비입주자 모집",
+        "경상북도",
+        "",
+        "2026.05.29",
+        "2026.06.19",
+        "공고중",
+        "1,678"
+      ]
+    },
+    {
+      "cells": [
+        "54",
+        "공공임대",
+        "창원시 창원대산1,센트럴빌리지,가포금호어울림 10년공공임대(리츠) 예비입주자 모집 공고",
+        "경상남도",
+        "",
+        "2026.05.29",
+        "2026.06.09",
+        "공고중",
+        "8,498"
+      ]
+    }
+  ]
+}
