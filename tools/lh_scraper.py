@@ -136,11 +136,11 @@ def _download_pdf_text(page: Page, file_id: str) -> str:
     """playwright로 PDF를 다운로드해 텍스트를 반환한다."""
     import os, tempfile
     try:
-        from tools.pdf_parser import extract_text_from_file, clean_pdf_text
+        from tools.pdf_parser import extract_price_focused
     except ImportError:
         import sys as _sys, os as _os
         _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-        from tools.pdf_parser import extract_text_from_file, clean_pdf_text
+        from tools.pdf_parser import extract_price_focused
 
     try:
         with page.expect_download(timeout=20000) as dl_info:
@@ -148,9 +148,10 @@ def _download_pdf_text(page: Page, file_id: str) -> str:
         download = dl_info.value
         tmp_path = tempfile.mktemp(suffix=".pdf")
         download.save_as(tmp_path)
-        raw = extract_text_from_file(tmp_path)
+        with open(tmp_path, "rb") as f:
+            data = f.read()
         os.unlink(tmp_path)
-        return clean_pdf_text(raw)
+        return extract_price_focused(data)
     except Exception as e:
         print(f"  ⚠️  PDF 다운로드 실패 (fileId={file_id}): {e}", file=sys.stderr)
         return ""
