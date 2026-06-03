@@ -173,10 +173,10 @@ def fetch_detail_with_pdf(notice_id: str, mi: str = "1026") -> dict:
     with sync_playwright() as pw:
         browser, page = _make_browser(pw)
         try:
-            page.goto(LH_MAIN_URL, timeout=20000)
-            page.wait_for_load_state("networkidle", timeout=15000)
-            page.goto(list_url, timeout=20000)
-            page.wait_for_load_state("networkidle", timeout=15000)
+            page.goto(LH_MAIN_URL, timeout=30000)
+            page.wait_for_load_state("networkidle", timeout=20000)
+            page.goto(list_url, timeout=30000)
+            page.wait_for_load_state("networkidle", timeout=20000)
             page.wait_for_timeout(3000)
 
             link = page.query_selector(f'a.wrtancInfoBtn[data-id1="{notice_id}"]')
