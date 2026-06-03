@@ -66,8 +66,14 @@ def get_existing_topics(blog: str) -> set:
 def get_next_task_id(folder: Path, suffix: str = "") -> str:
     today = date.today().strftime("%Y%m%d")
     existing = list(folder.glob(f"{today}_*.md"))
-    seq = len(existing) + 1
-    return f"{today}_{seq:03d}{suffix}"
+    max_seq = 0
+    for p in existing:
+        try:
+            num = int(p.stem.replace(f"{today}_", "").rstrip("s"))
+            max_seq = max(max_seq, num)
+        except ValueError:
+            pass
+    return f"{today}_{max_seq + 1:03d}{suffix}"
 
 
 def create_task(folder: Path, task_id: str, topic: str, series: str,
