@@ -95,30 +95,43 @@ def scrape() -> List[dict]:
     return results
 
 
-def fetch_detail(url: str) -> str:
-    """공고 상세 페이지 텍스트를 추출한다 (목록 → 상세 순서로 이동)."""
+def fetch_detail_by_notice_id(notice_id: str) -> str:
+    """목록 페이지에서 공고번호에 해당하는 항목을 클릭해 상세 텍스트를 추출한다."""
     with sync_playwright() as pw:
         browser, page = _make_browser(pw)
         try:
-            page.goto(LH_MAIN_URL, timeout=20000)
-            page.wait_for_load_state("networkidle", timeout=15000)
-            page.goto(LH_LIST_URL, timeout=20000)      # 목록 먼저 (세션)
-            page.wait_for_load_state("networkidle", timeout=15000)
-            page.wait_for_timeout(2000)
-            page.goto(url, timeout=20000)
-            page.wait_for_load_state("networkidle", timeout=15000)
-            page.wait_for_timeout(2000)
+            _load_list_page(page)
 
-            for sel in [".view_wrap", ".detail_wrap", ".bbs_view", ".cont_wrap", "#content", "main"]:
+            # data-id1이 notice_id와 일치하는 링크 클릭
+            link = page.query_selector(f'a.wrtancInfoBtn[data-id1="{notice_id}"]')
+            if not link:
+                return ""
+
+            link.click()
+            page.wait_for_timeout(3000)
+
+            # 오버레이/레이어 팝업 또는 페이지 이동 후 본문 추출
+            for sel in [".popup_wrap", ".layer_wrap", ".view_wrap", ".detail_wrap",
+                        ".bbs_view", ".cont_wrap", "#content .view", "main"]:
                 el = page.query_selector(sel)
                 if el:
                     text = el.inner_text().strip()
                     if len(text) > 200:
                         return text[:6000]
 
+            # 전체 페이지 텍스트 (목록 포함)
             return page.inner_text("body").strip()[:6000]
         finally:
             browser.close()
+
+
+def fetch_detail(url: str) -> str:
+    """공고 상세 URL에서 notice_id를 추출해 fetch_detail_by_notice_id를 호출한다."""
+    import re as _re
+    m = _re.search(r"wrtancNo=([^&]+)", url)
+    if m:
+        return fetch_detail_by_notice_id(m.group(1))
+    return ""
 
 
 if __name__ == "__main__":
