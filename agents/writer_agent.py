@@ -254,19 +254,28 @@ def generate_content(task: dict, writing_guide: Path) -> tuple:
     return title, html
 
 
-def run(blog: str):
+def run(blog: str, task_file: Optional[Path] = None, dry_run: bool = False):
     print("=" * 50)
-    print(f"Writer Agent — {blog}")
+    label = f"Writer Agent — {blog}" + (" [DRY-RUN]" if dry_run else "")
+    print(label)
     print("=" * 50)
 
     paths = get_paths(blog)
-    paths["articles_draft"].mkdir(parents=True, exist_ok=True)
-    paths["tasks_writing"].mkdir(parents=True, exist_ok=True)
 
-    task_file = get_next_task(paths["tasks_planned"])
-    if not task_file:
-        print(f"처리할 Task 없음 ({paths['tasks_planned']})")
-        return
+    # ── task 파일 결정 ────────────────────────────
+    if task_file:
+        # --task 지정: 해당 파일만 처리
+        if not task_file.exists():
+            print(f"❌ Task 파일 없음: {task_file}")
+            return
+    else:
+        # 운영 모드: planned에서 priority 순으로 다음 task
+        paths["articles_draft"].mkdir(parents=True, exist_ok=True)
+        paths["tasks_writing"].mkdir(parents=True, exist_ok=True)
+        task_file = get_next_task(paths["tasks_planned"])
+        if not task_file:
+            print(f"처리할 Task 없음 ({paths['tasks_planned']})")
+            return
 
     task    = parse_task(task_file)
     task_id = task.get("task_id", task_file.stem)
@@ -283,19 +292,34 @@ def run(blog: str):
 
     print(f"  제목: {title}")
 
-    draft_path = paths["articles_draft"] / f"{task_id}.html"
-    draft_path.write_text(f"<!-- TITLE: {title} -->\n{html}", encoding="utf-8")
-    print(f"  초안 저장: {draft_path}")
-
-    writing_path = paths["tasks_writing"] / task_file.name
-    shutil.move(str(task_file), str(writing_path))
-    print(f"  Task 이동: planned/ → writing/")
-
-    print(f"\n✅ 완료: {task_id}")
+    if dry_run:
+        # ── 개발 모드: preview 저장, 운영 데이터 불변 ──
+        preview_dir = Path(f"articles/{blog}/preview")
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        out_path = preview_dir / f"{task_id}.html"
+        out_path.write_text(f"<!-- TITLE: {title} -->\n{html}", encoding="utf-8")
+        print(f"  [DRY-RUN] Preview 저장: {out_path}")
+        print(f"  [DRY-RUN] Task 이동 없음, 발행 없음")
+        print(f"\n✅ 완료 (dry-run): {task_id}")
+    else:
+        # ── 운영 모드 ──────────────────────────────
+        paths["articles_draft"].mkdir(parents=True, exist_ok=True)
+        paths["tasks_writing"].mkdir(parents=True, exist_ok=True)
+        draft_path = paths["articles_draft"] / f"{task_id}.html"
+        draft_path.write_text(f"<!-- TITLE: {title} -->\n{html}", encoding="utf-8")
+        print(f"  초안 저장: {draft_path}")
+        writing_path = paths["tasks_writing"] / task_file.name
+        shutil.move(str(task_file), str(writing_path))
+        print(f"  Task 이동: planned/ → writing/")
+        print(f"\n✅ 완료: {task_id}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--blog", required=True, help="블로그 이름 (blogs/ 하위 폴더명)")
+    parser.add_argument("--blog",    required=True,        help="블로그 이름")
+    parser.add_argument("--task",    type=Path, default=None,
+                        help="[개발] 특정 task 파일 경로 (예: blogs/llmenginehistory/tasks/test/test_xxx.md)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="[개발] 글 생성 후 articles/preview/ 저장. 발행/task 이동 없음")
     args = parser.parse_args()
-    run(args.blog)
+    run(args.blog, task_file=args.task, dry_run=args.dry_run)

@@ -296,6 +296,57 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
     return {}
 
 
+def _write_task_file(folder: Path, task_id: str, item: dict, fields: dict,
+                     category: str, housing_source: str, task_priority: str):
+    """Task 파일을 생성한다. planner 운영/개발 모드 공통 사용."""
+    folder.mkdir(parents=True, exist_ok=True)
+    notice_id   = item.get("notice_id", "")
+    notice_name = item.get("notice_name", "")
+    supply_type = item.get("supply_type", "")
+    region      = item.get("region", "")
+    notice_date = item.get("notice_date", "")
+    detail_url  = item.get("detail_url", "")
+
+    content = f"""---
+task_id: {task_id}
+status: planned
+topic: {notice_name} 공고 해설
+series: 청약공고해설
+priority: {task_priority}
+housing_source: {housing_source}
+template: {category}
+type: 단편
+parts: 1
+notice_id: {notice_id}
+notice_name: {notice_name}
+supply_type: {supply_type}
+housing_category: {category}
+region: {region}
+notice_date: {notice_date}
+deadline: {item.get('deadline', '')}
+detail_url: {detail_url}
+total_units: {fields.get('total_units', '')}
+apply_start: {fields.get('apply_start', '')}
+apply_end: {fields.get('apply_end', '')}
+result_date: {fields.get('result_date', '')}
+move_in: {fields.get('move_in', '')}
+supply_target: {fields.get('supply_target', '')}
+deposit: {fields.get('deposit', '')}
+monthly_rent: {fields.get('monthly_rent', '')}
+jeonse_amount: {fields.get('jeonse_amount', '')}
+house_types: {fields.get('house_types', '')}
+first_supply: {fields.get('first_supply', '')}
+conversion: {fields.get('conversion', '')}
+location_detail: {fields.get('location_detail', '')}
+qualifications: |
+  {fields.get('qualifications', '').replace(chr(10), chr(10) + '  ')}
+created_by: planner_agent
+created_at: {date.today().isoformat()}
+---
+"""
+    (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
+
+
 def get_existing_notice_ids(blog: str) -> set:
     ids = set()
     base = Path(f"blogs/{blog}/tasks")
@@ -348,55 +399,19 @@ def cheongyak_run(paths: dict):
 
         # 상세 페이지 크롤링 + 구조화 추출
         housing_source = item.get("housing_source", "임대")
-        task_priority  = item.get("priority", "medium")  # 분양=high, 임대=medium
+        task_priority  = item.get("priority", "medium")
         print(f"  상세 수집 중: [{housing_source}] {notice_name[:30]}...")
         detail_text = fetch_detail(detail_url)
         fields      = extract_notice_fields(detail_text, supply_type)
         category    = get_housing_category(supply_type)
 
-        task_id = get_next_task_id(paths["planned"])
-        folder  = paths["planned"]
-        folder.mkdir(parents=True, exist_ok=True)
-
-        content = f"""---
-task_id: {task_id}
-status: planned
-topic: {notice_name} 공고 해설
-series: 청약공고해설
-priority: {task_priority}
-housing_source: {housing_source}
-template: {category}
-type: 단편
-parts: 1
-notice_id: {notice_id}
-notice_name: {notice_name}
-supply_type: {supply_type}
-housing_category: {category}
-region: {region}
-notice_date: {notice_date}
-deadline: {item.get('deadline', '')}
-detail_url: {detail_url}
-total_units: {fields.get('total_units', '')}
-apply_start: {fields.get('apply_start', '')}
-apply_end: {fields.get('apply_end', '')}
-result_date: {fields.get('result_date', '')}
-move_in: {fields.get('move_in', '')}
-supply_target: {fields.get('supply_target', '')}
-deposit: {fields.get('deposit', '')}
-monthly_rent: {fields.get('monthly_rent', '')}
-jeonse_amount: {fields.get('jeonse_amount', '')}
-house_types: {fields.get('house_types', '')}
-first_supply: {fields.get('first_supply', '')}
-conversion: {fields.get('conversion', '')}
-location_detail: {fields.get('location_detail', '')}
-qualifications: |
-  {fields.get('qualifications', '').replace(chr(10), chr(10) + '  ')}
-created_by: planner_agent
-created_at: {date.today().isoformat()}
----
-"""
-        (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
-        print(f"  📋 Task 생성: {task_id} — [{housing_source}/{category}] {notice_name[:30]}")
+        _write_task_file(
+            folder=paths["planned"],
+            task_id=get_next_task_id(paths["planned"]),
+            item=item, fields=fields, category=category,
+            housing_source=housing_source, task_priority=task_priority,
+        )
+        print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
         created += 1
 
     if created == 0:
@@ -409,11 +424,76 @@ created_at: {date.today().isoformat()}
 # 진입점
 # ─────────────────────────────────────────────
 
+def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
+    """개발용: 공고 1건만 처리해 tasks/test/ 에 저장. 운영 데이터 불변."""
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.lh_scraper import fetch_detail_by_notice_id, LH_SALE_URL, LH_RENTAL_URL
+
+    print("=" * 50)
+    print(f"[DEV] Planner — 단일 공고 모드: {notice_id}")
+    print("=" * 50)
+
+    test_folder = Path(f"blogs/{blog}/tasks/test")
+    test_folder.mkdir(parents=True, exist_ok=True)
+
+    print(f"  상세 수집 중 (mi={mi})...")
+    detail_text = fetch_detail_by_notice_id(notice_id, mi)
+    if not detail_text:
+        print(f"❌ 공고 텍스트 수집 실패. notice_id={notice_id}, mi={mi} 확인")
+        return
+
+    # 기본 정보 추정 (텍스트에서)
+    housing_source = "분양" if mi == "1027" else "임대"
+    supply_type    = ""
+    for line in detail_text.splitlines()[:30]:
+        for key in ["공공분양", "국민임대", "행복주택", "매입임대", "든든전세",
+                    "영구임대", "통합공공임대", "공공임대", "분양전환"]:
+            if key in line:
+                supply_type = key
+                break
+        if supply_type:
+            break
+
+    fields   = extract_notice_fields(detail_text, supply_type)
+    category = get_housing_category(supply_type)
+    priority = "high" if mi == "1027" else "medium"
+
+    task_id = f"test_{notice_id}"
+    item = {
+        "notice_id":      notice_id,
+        "notice_name":    fields.get("location_detail", notice_id),
+        "supply_type":    supply_type,
+        "region":         "",
+        "notice_date":    "",
+        "deadline":       fields.get("apply_end", ""),
+        "detail_url":     f"https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancDetail.do?wrtancNo={notice_id}&mi={mi}",
+        "housing_source": housing_source,
+        "priority":       priority,
+    }
+
+    _write_task_file(
+        folder=test_folder, task_id=task_id, item=item,
+        fields=fields, category=category,
+        housing_source=housing_source, task_priority=priority,
+    )
+
+    out_path = test_folder / f"{task_id}.md"
+    print(f"\n✅ Task 저장: {out_path}")
+    print(f"   다음 단계: python agents/writer_agent.py --blog {blog} --task {out_path} --dry-run")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--blog",    required=True, help="블로그 이름")
-    parser.add_argument("--suggest", action="store_true", help="AI 주제 제안 모드 (mbtireallove 전용)")
+    parser.add_argument("--blog",      required=True, help="블로그 이름")
+    parser.add_argument("--suggest",   action="store_true", help="AI 주제 제안 모드 (mbtireallove 전용)")
+    parser.add_argument("--notice-id", dest="notice_id", help="[개발] 공고번호 1건만 처리 → tasks/test/ 저장")
+    parser.add_argument("--mi",        default="1026", help="[개발] LH 목록 mi 값 (1026=임대, 1027=분양)")
     args = parser.parse_args()
+
+    if args.notice_id:
+        dev_single_notice(args.blog, args.notice_id, args.mi)
+        sys.exit(0)
 
     paths = get_paths(args.blog)
 
