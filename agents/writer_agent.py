@@ -117,58 +117,73 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     guide = _load_category_guide(blog_name, category)
     focus = CATEGORY_FOCUS.get(category, CATEGORY_FOCUS["general"])
 
-    system_prompt = (
-        "당신은 청약 정보를 전문적으로 해설하는 블로그 작가입니다.\n"
-        "독자는 청약에 관심 있는 사람으로, LH·청약·국민임대 등 기본 개념은 알고 있습니다.\n"
-        "기본 개념 설명 없이 이번 공고에만 집중해서 작성하세요.\n\n"
-        "절대 금지 표현:\n"
-        "- '공고문을 확인하세요', '알아보겠습니다', '살펴보겠습니다'\n"
-        "- LH가 무엇인지, 청약이 무엇인지, 국민임대가 무엇인지 설명\n\n"
-        "반드시 포함:\n"
-        "- '누가 보면 좋은 공고인지' 명확하게 작성\n"
-        f"- 이 공고 유형({supply_type})의 핵심 포인트: {focus}\n\n"
-        "작성 가이드:\n"
-        f"{guide}"
-    )
+    system_prompt = f"""당신은 청약 정보를 전문적으로 해설하는 블로그 작가입니다.
+
+독자: 청약에 이미 관심 있는 사람. 기본 개념은 안다.
+목표: 독자가 "나는 신청해야 해? 말아야 해?"를 판단할 수 있도록.
+
+절대 금지:
+- 공고명을 제목으로 그대로 사용
+- "이번 공고는..." 으로 시작
+- LH·청약·국민임대 등 기본 개념 설명
+- "공고문을 확인하세요", "알아보겠습니다", "살펴보겠습니다"
+- 의미 없는 반복, 뻔한 마무리
+
+이 공고 유형({supply_type})의 핵심 포인트: {focus}
+
+작성 가이드:
+{guide}"""
 
     # 필드 요약 (없는 항목은 생략)
-    fields_summary = []
-    if total_units:   fields_summary.append(f"총 세대수: {total_units}")
-    if apply_start:   fields_summary.append(f"신청 시작: {apply_start}")
-    if apply_end:     fields_summary.append(f"신청 마감: {apply_end}")
-    if result_date:   fields_summary.append(f"당첨 발표: {result_date}")
-    if move_in:       fields_summary.append(f"입주 예정: {move_in}")
-    if supply_target: fields_summary.append(f"공급 대상: {supply_target}")
-    if qualifications:fields_summary.append(f"신청 자격: {qualifications}")
-    if deposit:       fields_summary.append(f"보증금: {deposit}")
-    if monthly_rent:  fields_summary.append(f"월 임대료: {monthly_rent}")
-    if jeonse_amount: fields_summary.append(f"전세금: {jeonse_amount}")
-    if house_types:   fields_summary.append(f"주택형: {house_types}")
-    if first_supply:  fields_summary.append(f"우선공급: {first_supply}")
-    if conversion:    fields_summary.append(f"분양전환: {conversion}")
-    if location_detail: fields_summary.append(f"위치: {location_detail}")
+    fields_lines = []
+    if total_units:    fields_lines.append(f"총 세대수: {total_units}")
+    if apply_start:    fields_lines.append(f"신청 시작: {apply_start}")
+    if apply_end:      fields_lines.append(f"신청 마감: {apply_end}")
+    if result_date:    fields_lines.append(f"당첨 발표: {result_date}")
+    if move_in:        fields_lines.append(f"입주 예정: {move_in}")
+    if supply_target:  fields_lines.append(f"공급 대상: {supply_target}")
+    if qualifications: fields_lines.append(f"신청 자격: {qualifications}")
+    if deposit:        fields_lines.append(f"보증금: {deposit}")
+    if monthly_rent:   fields_lines.append(f"월 임대료: {monthly_rent}")
+    if jeonse_amount:  fields_lines.append(f"전세금: {jeonse_amount}")
+    if house_types:    fields_lines.append(f"주택형: {house_types}")
+    if first_supply:   fields_lines.append(f"우선공급: {first_supply}")
+    if conversion:     fields_lines.append(f"분양전환: {conversion}")
+    if location_detail: fields_lines.append(f"위치: {location_detail}")
 
-    user_prompt = f"""다음 LH 청약 공고를 해설하는 블로그 글을 HTML로 작성해주세요.
+    fields_text = "\n".join(fields_lines) if fields_lines else "데이터 추출 미완료"
 
-## 공고 정보
+    user_prompt = f"""아래 LH 청약 공고를 해설하는 블로그 글을 HTML로 작성하세요.
+
+## 공고 원본 정보
 - 공고명: {notice_name}
-- 공급유형: {supply_type} (카테고리: {category})
+- 공급유형: {supply_type}
 - 지역: {region}
 - 공고일: {notice_date}
-- 공고번호: {notice_id}
 - 원문: {detail_url}
 
-## 추출된 공고 데이터
-{chr(10).join(fields_summary) if fields_summary else "데이터 추출 미완료 — 공고명과 지역 기반으로 작성"}
+## 추출된 데이터
+{fields_text}
 
 ---
 
-맨 첫 줄에 부제목:
-<!-- SUBTITLE: [이 공고의 핵심을 한 줄로] -->
+출력 형식:
+1. 맨 첫 줄: <!-- TITLE: [SEO 제목] -->
+   - 공고명 그대로 사용 금지
+   - 독자가 검색할 표현으로 작성
+   - 예: "{region.replace('특별시','').replace('광역시','').replace('도','')} {supply_type} 신청 조건 총정리"
 
-이후 가이드 구조대로 HTML 본문 작성.
-데이터가 없는 항목은 억측하지 말고 해당 항목을 자연스럽게 생략.
-반드시 마지막에 "이런 분께 추천" 문단 포함."""
+2. 이후 HTML 본문 (가이드 구조 순서대로):
+   - 핵심 요약 표
+   - 도입 ("이번 공고는..." 금지)
+   - 지역 생활권/교통/수요 2~3문장
+   - 신청 일정 (마감일 굵게)
+   - 신청 자격
+   - 주거 조건
+   - 청약연구소 한줄 코멘트 (형식: <div class="expert-comment"><strong>청약연구소 한줄 코멘트</strong><p>...</p></div>)
+   - 봐야 하는 사람 / 굳이 안 봐도 되는 사람 (두 파트 모두 필수)
+
+데이터 없는 항목은 생략. 억측 금지."""
 
     resp = azure_client.chat.completions.create(
         model=DEPLOYMENT,
@@ -177,15 +192,17 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
             {"role": "user",   "content": user_prompt},
         ],
         temperature=0.7,
-        max_completion_tokens=3000,
+        max_completion_tokens=3500,
         timeout=90,
     )
     raw = resp.choices[0].message.content.strip()
 
-    m        = re.search(r"<!--\s*SUBTITLE:\s*(.+?)\s*-->", raw)
-    subtitle = m.group(1) if m else notice_name
-    html     = re.sub(r"<!--\s*SUBTITLE:\s*.+?\s*-->\n?", "", raw)
-    title    = f"🏠 {notice_name} — {subtitle}"
+    # TITLE 추출 (GPT가 전체 제목 생성)
+    m     = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", raw)
+    title = m.group(1).strip() if m else notice_name
+    if not title.startswith("🏠"):
+        title = f"🏠 {title}"
+    html  = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", raw)
 
     return title, html
 
