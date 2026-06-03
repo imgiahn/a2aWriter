@@ -376,7 +376,7 @@ def get_existing_notice_ids(blog: str) -> set:
 def cheongyak_run(paths: dict):
     import sys as _sys, os as _os
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-    from tools.lh_scraper import scrape, fetch_detail_with_pdf
+    from tools.lh_scraper import scrape, fetch_detail_with_pdf  # noqa
 
     print("=" * 50)
     print("Planner Agent — llmenginehistory (LH 청약 공고)")
@@ -413,12 +413,13 @@ def cheongyak_run(paths: dict):
         # 상세 페이지 크롤링 + PDF 다운로드 + 구조화 추출
         housing_source = item.get("housing_source", "임대")
         task_priority  = item.get("priority", "medium")
-        print(f"  상세 수집 중: [{housing_source}] {notice_name[:30]}...")
-        detail = fetch_detail_with_pdf(detail_url.split("wrtancNo=")[-1].split("&")[0],
-                                       item.get("list_mi", "1026"))
+        mi             = item.get("list_mi", "1026")
+        print(f"  상세+PDF 수집 중: [{housing_source}] {notice_name[:30]}...")
+        detail      = fetch_detail_with_pdf(notice_id, mi)
         detail_text = detail["text"]
         pdf_text    = detail.get("pdf_text", "")
-        # PDF 있으면 GPT 추출 시 함께 활용
+        if pdf_text:
+            print(f"    📄 PDF {detail.get('pdf_filename','')[:30]} ({len(pdf_text)}자)")
         combined    = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
         fields      = extract_notice_fields(combined, supply_type)
         category    = get_housing_category(supply_type)
