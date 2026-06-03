@@ -96,12 +96,15 @@ def scrape() -> List[dict]:
 
 
 def fetch_detail(url: str) -> str:
-    """공고 상세 페이지 텍스트를 추출한다."""
+    """공고 상세 페이지 텍스트를 추출한다 (목록 → 상세 순서로 이동)."""
     with sync_playwright() as pw:
         browser, page = _make_browser(pw)
         try:
             page.goto(LH_MAIN_URL, timeout=20000)
             page.wait_for_load_state("networkidle", timeout=15000)
+            page.goto(LH_LIST_URL, timeout=20000)      # 목록 먼저 (세션)
+            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_timeout(2000)
             page.goto(url, timeout=20000)
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(2000)
