@@ -311,6 +311,14 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
     return {}
 
 
+def _get_cached_pdf(notice_id: str) -> bytes:
+    """이미 저장된 PDF가 있으면 bytes로 반환한다."""
+    pdf_path = Path(f"data/llmenginehistory/notices/{notice_id}/original.pdf")
+    if pdf_path.exists():
+        return pdf_path.read_bytes()
+    return b""
+
+
 def _save_pdf_to_disk(notice_id: str, pdf_bytes: bytes) -> Optional[str]:
     """PDF bytes를 data/llmenginehistory/notices/{notice_id}/original.pdf 로 저장한다."""
     if not pdf_bytes or not notice_id:
@@ -475,10 +483,16 @@ def cheongyak_run(paths: dict):
         task_priority  = item.get("priority", "medium")
         mi             = item.get("list_mi", "1026")
         print(f"  상세+PDF 수집 중: [{housing_source}] {notice_name[:30]}...")
+        # PDF 캐시 확인 — 이미 있으면 웹 다운로드 스킵
+        cached_pdf = _get_cached_pdf(notice_id)
         detail      = fetch_detail_with_pdf(notice_id, mi)
         detail_text = detail["text"]
-        pdf_text    = detail.get("pdf_text", "")
-        pdf_bytes   = detail.get("pdf_bytes", b"")
+        pdf_bytes   = cached_pdf or detail.get("pdf_bytes", b"")
+        pdf_text    = detail.get("pdf_text", "") if not cached_pdf else ""
+        if cached_pdf:
+            from tools.pdf_parser import extract_price_focused
+            pdf_text = extract_price_focused(cached_pdf)
+            print(f"    📄 PDF 캐시 사용 ({len(pdf_text)}자)")
         if pdf_text:
             print(f"    📄 PDF {detail.get('pdf_filename','')[:30]} ({len(pdf_text)}자)")
         combined    = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
@@ -556,10 +570,15 @@ def applyhome_run(paths: dict):
         task_priority  = item.get("priority", "high")
         print(f"  상세+PDF 수집 중: [{housing_source}] {notice_name[:30]}...")
 
+        cached_pdf  = _get_cached_pdf(notice_id)
         detail      = ah_fetch(notice_id)
         detail_text = detail["text"]
-        pdf_text    = detail.get("pdf_text", "")
-        pdf_bytes   = detail.get("pdf_bytes", b"")
+        pdf_bytes   = cached_pdf or detail.get("pdf_bytes", b"")
+        pdf_text    = detail.get("pdf_text", "") if not cached_pdf else ""
+        if cached_pdf:
+            from tools.pdf_parser import extract_price_focused
+            pdf_text = extract_price_focused(cached_pdf)
+            print(f"    📄 PDF 캐시 사용 ({len(pdf_text)}자)")
         if pdf_text:
             print(f"    📄 PDF ({len(pdf_text)}자)")
 
