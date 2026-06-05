@@ -173,83 +173,50 @@ def scrape_notices(max_pages: int = 5) -> list:
 def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
     """공고 상세 텍스트 + PDF bytes를 반환한다.
 
+    Playwright 대신 requests로 AJAX API 직접 호출 — 훨씬 안정적.
     lh_scraper.py와 동일한 반환 형식:
       {"text": str, "pdf_text": str, "pdf_filename": str, "pdf_bytes": bytes}
     """
+    import re as _re
     try:
-        from tools.pdf_parser import extract_price_focused, extract_scoring_focused
+        import requests as _req
+        from tools.pdf_parser import extract_price_focused
     except ImportError:
         import os as _os
         sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-        from tools.pdf_parser import extract_price_focused, extract_scoring_focused
+        import requests as _req
+        from tools.pdf_parser import extract_price_focused
 
-    with sync_playwright() as pw:
-        browser, context, page = _make_browser(pw)
-        try:
-            page.goto(LIST_PAGES[0], timeout=45000, wait_until="domcontentloaded")
-            page.wait_for_load_state("domcontentloaded", timeout=30000)
-            page.wait_for_timeout(2000)
+    DETAIL_API = f"{BASE_URL}/ai/aia/selectAPTLttotPblancDetail.do"
+    HEADERS = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Referer":      f"{BASE_URL}/ai/aia/selectAPTLttotPblancListView.do",
+        "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    }
+    payload = f"houseManageNo={notice_id}&pblancNo={notice_id}&gvPgmId=AIA01M01"
 
-            # 목록에서 해당 공고 행 찾기 (3개 목록 페이지 순회)
-            found = False
-            for list_url in LIST_PAGES:
-                page.goto(list_url, timeout=45000, wait_until="domcontentloaded")
-                page.wait_for_load_state("domcontentloaded", timeout=30000)
-                page.wait_for_timeout(1500)
-                for page_num in range(1, 15):
-                    if page_num > 1:
-                        nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
-                        if not nav:
-                            break
-                        page.evaluate("el => el.click()", nav)
-                        page.wait_for_load_state("domcontentloaded", timeout=20000)
-                        page.wait_for_timeout(1500)
-                    row = page.query_selector(f"tr[data-pbno='{notice_id}']")
-                    if row:
-                        found = True
-                        break
-                if found:
-                    break
+    try:
+        resp = _req.post(DETAIL_API, data=payload, headers=HEADERS, timeout=20)
+        resp.raise_for_status()
+        html = resp.text
+    except Exception as e:
+        print(f"    ⚠️  상세 API 호출 실패: {e}", file=sys.stderr)
+        return {"text": "", "pdf_text": "", "pdf_filename": "", "pdf_bytes": b""}
 
-            if not found:
-                return {"text": "", "pdf_text": "", "pdf_filename": "", "pdf_bytes": b""}
+    # HTML에서 텍스트 추출
+    text = _re.sub(r"<[^>]+>", " ", html)
+    text = _re.sub(r"\s+", " ", text).strip()[:8000]
 
-            # 공고명 링크 클릭 → 모달
-            link = row.query_selector("a.txt_l_b")
-            if not link:
-                return {"text": "", "pdf_text": "", "pdf_filename": "", "pdf_bytes": b""}
+    # PDF 링크 탐색 (getAtchmnfl.do?...)
+    pdf_text     = ""
+    pdf_filename = ""
+    pdf_bytes    = b""
 
-            link.click()
-            page.wait_for_timeout(3000)
-
-            # iframe 접근
-            iframe_el = page.query_selector("iframe#iframeDialog")
-            if not iframe_el:
-                return {"text": "", "pdf_text": "", "pdf_filename": "", "pdf_bytes": b""}
-
-            iframe = iframe_el.content_frame()
-            if not iframe:
-                return {"text": "", "pdf_text": "", "pdf_filename": "", "pdf_bytes": b""}
-
-            iframe.wait_for_load_state("domcontentloaded", timeout=20000)
-            page.wait_for_timeout(1000)
-
-            # 본문 텍스트
-            try:
-                text = iframe.inner_text("body").strip()[:8000]
-            except Exception:
-                text = ""
-
-            # PDF 링크 탐색
-            pdf_link = iframe.query_selector("a[href*='getAtchmnfl']")
-            pdf_text     = ""
-            pdf_filename = ""
-            pdf_bytes    = b""
-
-            if pdf_link:
-                pdf_href = pdf_link.get_attribute("href") or ""
-                pdf_filename = f"applyhome_{notice_id}.pdf"
-                print(f"  📎 PDF 발견, 다운로드 중...", file=sys.stderr)
+    pdf_m = _re.search(r'href="(https://static\.applyhome\.co\.kr[^"]*getAtchmnfl[^"]*)"', html)
+    if pdf_m:
+        pdf_url      = pdf_m.group(1)
+        pdf_filename = f"applyhome_{notice_id}.pdf"
+        print(f"  📎 PDF 발견, 다운로드 중...", file=sys.stderr)
                 try:
                     import tempfile, os
                     with context.expect_page(timeout=15000) as new_page_info:
@@ -260,22 +227,14 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
                     pass
 
                 # expect_download 방식
-                try:
-                    with page.expect_download(timeout=20000) as dl_info:
-                        iframe.evaluate(f"window.location.href = '{pdf_href}'")
-                    dl = dl_info.value
-                    tmp_path = tempfile.mktemp(suffix=".pdf")
-                    dl.save_as(tmp_path)
-                    with open(tmp_path, "rb") as f:
-                        pdf_bytes = f.read()
-                    os.unlink(tmp_path)
-                    if pdf_bytes:
-                        pdf_text = extract_price_focused(pdf_bytes)
-                except Exception as e:
-                    print(f"  ⚠️  PDF 다운로드 실패: {e}", file=sys.stderr)
-
-        finally:
-            browser.close()
+        try:
+            pdf_resp  = _req.get(pdf_url, headers=HEADERS, timeout=30)
+            pdf_bytes = pdf_resp.content
+            if pdf_bytes:
+                pdf_text = extract_price_focused(pdf_bytes)
+                print(f"    📄 PDF {len(pdf_text)}자", file=sys.stderr)
+        except Exception as e:
+            print(f"    ⚠️  PDF 다운로드 실패: {e}", file=sys.stderr)
 
     return {
         "text":         text,
