@@ -89,7 +89,7 @@ def _parse_rows(page: Page, region: str, apt_only: bool = False) -> list:
             m = _re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", end_str)
             if m:
                 dl = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                if dl < today:
+                if dl <= today:
                     continue
         except Exception:
             pass
