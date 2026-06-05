@@ -31,7 +31,10 @@ def _this_month_param() -> str:
 
 
 def _make_browser(pw):
-    browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+    browser = pw.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    )
     context = browser.new_context(
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     )
@@ -134,7 +137,7 @@ def scrape_notices(max_pages: int = 5) -> list:
                 for region in TARGET_REGIONS:
                     url = f"{list_url}?suplyAreaCode={region}&beginPd={begin_pd}"
                     page.goto(url, timeout=30000)
-                    page.wait_for_load_state("networkidle", timeout=20000)
+                    page.wait_for_load_state("domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1500)
 
                     for page_num in range(1, max_pages + 1):
@@ -143,7 +146,7 @@ def scrape_notices(max_pages: int = 5) -> list:
                             if not nav:
                                 break
                             nav.click()
-                            page.wait_for_load_state("networkidle", timeout=15000)
+                            page.wait_for_load_state("domcontentloaded", timeout=20000)
                             page.wait_for_timeout(1000)
 
                         rows_found = _parse_rows(page, region, apt_only=apt_only)
@@ -178,14 +181,14 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
         browser, context, page = _make_browser(pw)
         try:
             page.goto(LIST_PAGES[0], timeout=30000)
-            page.wait_for_load_state("networkidle", timeout=20000)
+            page.wait_for_load_state("domcontentloaded", timeout=30000)
             page.wait_for_timeout(2000)
 
             # 목록에서 해당 공고 행 찾기 (3개 목록 페이지 순회)
             found = False
             for list_url in LIST_PAGES:
                 page.goto(list_url, timeout=30000)
-                page.wait_for_load_state("networkidle", timeout=20000)
+                page.wait_for_load_state("domcontentloaded", timeout=30000)
                 page.wait_for_timeout(1500)
                 for page_num in range(1, 15):
                     if page_num > 1:
@@ -193,7 +196,7 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
                         if not nav:
                             break
                         nav.click()
-                        page.wait_for_load_state("networkidle", timeout=15000)
+                        page.wait_for_load_state("domcontentloaded", timeout=20000)
                         page.wait_for_timeout(1500)
                     row = page.query_selector(f"tr[data-pbno='{notice_id}']")
                     if row:
@@ -222,7 +225,7 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
             if not iframe:
                 return {"text": "", "pdf_text": "", "pdf_filename": "", "pdf_bytes": b""}
 
-            iframe.wait_for_load_state("networkidle", timeout=15000)
+            iframe.wait_for_load_state("domcontentloaded", timeout=20000)
             page.wait_for_timeout(1000)
 
             # 본문 텍스트
