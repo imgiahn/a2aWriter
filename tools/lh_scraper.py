@@ -47,6 +47,9 @@ def _scrape_page(page: Page, list_url: str, mi: str, housing_source: str, priori
     print(f"  [{housing_source}] {len(rows)}행 발견", file=sys.stderr)
 
     results = []
+    from datetime import date as _date
+    today = _date.today()
+
     for row in rows:
         cells = [td.inner_text().strip() for td in row.query_selector_all("td")]
         if len(cells) < 6:
@@ -55,6 +58,19 @@ def _scrape_page(page: Page, list_url: str, mi: str, housing_source: str, priori
         region = cells[3] if len(cells) > 3 else ""
         if not any(kw in region for kw in REGION_KEYWORDS):
             continue
+
+        # 마감일 지난 공고 스킵
+        deadline_str = cells[6] if len(cells) > 6 else ""
+        if deadline_str:
+            try:
+                import re as _re
+                m = _re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", deadline_str)
+                if m:
+                    dl = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                    if dl < today:
+                        continue
+            except Exception:
+                pass
 
         link_el = row.query_selector("a.wrtancInfoBtn")
         notice_name = ""

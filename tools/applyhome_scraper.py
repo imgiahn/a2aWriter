@@ -28,6 +28,10 @@ def _make_browser(pw):
 
 def _parse_rows(page: Page) -> list:
     """현재 페이지 테이블에서 공고 목록을 파싱한다."""
+    from datetime import date as _date
+    import re as _re
+    today = _date.today()
+
     rows = page.query_selector_all("table tbody tr")
     items = []
     for row in rows:
@@ -50,6 +54,18 @@ def _parse_rows(page: Page) -> list:
         # 서울/경기/인천만
         if region not in TARGET_REGIONS:
             continue
+
+        # 마감일 지난 공고 스킵
+        if apply_range:
+            try:
+                end_str = apply_range.split("~")[-1].strip()
+                m = _re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", end_str)
+                if m:
+                    dl = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                    if dl < today:
+                        continue
+            except Exception:
+                pass
 
         housing_source = "임대" if "임대" in rent_secd else "분양"
         priority       = "high" if housing_source == "분양" else "medium"
