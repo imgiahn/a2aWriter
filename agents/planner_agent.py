@@ -429,16 +429,25 @@ pdf_path: {pdf_path}
 
 
 def get_existing_notice_ids(blog: str) -> set:
-    ids = set()
+    """기존 처리된 공고의 notice_id + notice_name을 모두 반환한다.
+
+    크로스소스 중복 방지 (LH/청약홈 ID 체계가 달라도 이름이 같으면 스킵).
+    """
+    keys = set()
     base = Path(f"blogs/{blog}/tasks")
     for folder in ["planned", "writing", "published", "failed"]:
         for f in (base / folder).glob("*.md"):
             text = f.read_text(encoding="utf-8")
             for line in text.splitlines():
                 if line.startswith("notice_id:"):
-                    ids.add(line.split(":", 1)[1].strip())
-                    break
-    return ids
+                    v = line.split(":", 1)[1].strip()
+                    if v:
+                        keys.add(v)
+                elif line.startswith("notice_name:"):
+                    v = line.split(":", 1)[1].strip()
+                    if v:
+                        keys.add(v)
+    return keys
 
 
 def cheongyak_run(paths: dict):
@@ -473,8 +482,7 @@ def cheongyak_run(paths: dict):
         if not notice_name or not detail_url:
             continue
 
-        dedup_key = notice_id or notice_name
-        if dedup_key in existing_ids:
+        if (notice_id and notice_id in existing_ids) or (notice_name and notice_name in existing_ids):
             print(f"  스킵 (중복): {notice_name}")
             continue
 
@@ -564,8 +572,7 @@ def applyhome_run(paths: dict):
         if not notice_name:
             continue
 
-        dedup_key = notice_id or notice_name
-        if dedup_key in existing_ids:
+        if (notice_id and notice_id in existing_ids) or (notice_name and notice_name in existing_ids):
             print(f"  스킵 (중복): {notice_name[:30]}")
             continue
 
