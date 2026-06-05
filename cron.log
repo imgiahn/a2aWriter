@@ -960,3 +960,30 @@ Task: 20260605_005
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main 50475a0] auto: 2026-06-05 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 5 files changed, 138 insertions(+)
+ create mode 100644 articles/llmenginehistory/published/20260605_005.html
+ create mode 100644 articles/llmenginehistory/summary/20260605_005.txt
+ rename blogs/llmenginehistory/tasks/{planned => published}/20260605_005.md (100%)
+ rename blogs/mbtireallove/tasks/{planned => writing}/20260531_041.md (100%)
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260531_041
+제목: ESTP ISTP 커플 궁합 – 속도감은 최고, 감정 표현은 숙제인 현실 액션 커플
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
