@@ -13,7 +13,13 @@ from typing import List, Dict, Optional
 
 from playwright.sync_api import sync_playwright, Page, BrowserContext
 
-LIST_URL = "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancListView.do"
+BASE_URL   = "https://www.applyhome.co.kr"
+# 수집 대상 목록 페이지 (APT 분양 / 오피스텔·도시형 / APT 잔여세대)
+LIST_PAGES = [
+    f"{BASE_URL}/ai/aia/selectAPTLttotPblancListView.do",
+    f"{BASE_URL}/ai/aia/selectOtherLttotPblancListView.do",
+    f"{BASE_URL}/ai/aia/selectAPTRemndrLttotPblancListView.do",
+]
 TARGET_REGIONS = ["서울", "경기", "인천"]
 
 
@@ -33,8 +39,12 @@ def _make_browser(pw):
     return browser, context, page
 
 
-def _parse_rows(page: Page, region: str) -> list:
-    """현재 페이지 테이블에서 공고 목록을 파싱한다 (이미 지역 필터링된 페이지)."""
+def _parse_rows(page: Page, region: str, apt_only: bool = False) -> list:
+    """현재 페이지 테이블에서 공고 목록을 파싱한다.
+
+    apt_only=True: APT 분양 페이지 → 민영만 수집 (국민/공공은 LH에서 처리)
+    청약기간 셀은 ~ 기호로 동적 탐색 (페이지별 열 구조가 다름)
+    """
     from datetime import date as _date
     import re as _re
     today = _date.today()
@@ -42,51 +52,62 @@ def _parse_rows(page: Page, region: str) -> list:
     rows = page.query_selector_all("table tbody tr")
     items = []
     for row in rows:
-        pbno  = row.get_attribute("data-pbno") or ""
-        honm  = row.get_attribute("data-honm") or ""
+        pbno = row.get_attribute("data-pbno") or ""
+        honm = row.get_attribute("data-honm") or ""
         if not pbno:
             continue
         cells = row.query_selector_all("td")
-        if len(cells) < 9:
+        if len(cells) < 6:
             continue
 
-        house_secd  = cells[1].inner_text().strip()   # 민영 / 국민
-        rent_secd   = cells[2].inner_text().strip()   # 분양주택 / 임대주택
-        notice_date = cells[6].inner_text().strip()
-        apply_range = cells[7].inner_text().strip()   # "2026-06-15 ~ 2026-06-17"
-        result_date = cells[8].inner_text().strip()
+        cell_texts = [c.inner_text().strip() for c in cells]
 
-        # 민영만 수집 (국민/공공은 LH 청약플러스에서 처리)
-        if house_secd != "민영":
+        # APT 분양 페이지: 민영만 수집
+        if apt_only and cell_texts[1] != "민영":
             continue
+
+        # 청약기간 셀 동적 탐색 (~ 포함 셀)
+        apply_range = ""
+        apply_idx   = -1
+        for i, t in enumerate(cell_texts):
+            if "~" in t and _re.search(r"\d{4}-\d{2}-\d{2}", t):
+                apply_range = t
+                apply_idx   = i
+                break
+
+        if not apply_range:
+            continue
+
+        notice_date = cell_texts[apply_idx - 1] if apply_idx > 0 else ""
+        result_date = cell_texts[apply_idx + 1] if apply_idx + 1 < len(cell_texts) else ""
+        house_secd  = cell_texts[1]
+        supply_type = house_secd
 
         # 마감일 지난 공고 스킵
-        if apply_range:
-            try:
-                end_str = apply_range.split("~")[-1].strip()
-                m = _re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", end_str)
-                if m:
-                    dl = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                    if dl < today:
-                        continue
-            except Exception:
-                pass
+        try:
+            end_str = apply_range.split("~")[-1].strip()
+            m = _re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", end_str)
+            if m:
+                dl = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                if dl < today:
+                    continue
+        except Exception:
+            pass
 
-        housing_source = "임대" if "임대" in rent_secd else "분양"
+        housing_source = "임대" if any(k in supply_type for k in ("임대", "민간임대")) else "분양"
         priority       = "high" if housing_source == "분양" else "medium"
-
-        deadline = apply_range.split("~")[-1].strip() if "~" in apply_range else apply_range
+        deadline       = apply_range.split("~")[-1].strip()
 
         items.append({
             "notice_id":      pbno,
             "notice_name":    honm,
-            "supply_type":    f"{house_secd} {rent_secd}".strip(),
+            "supply_type":    supply_type,
             "region":         region,
             "notice_date":    notice_date,
             "deadline":       deadline,
             "apply_range":    apply_range,
             "result_date":    result_date,
-            "detail_url":     f"{LIST_URL}?pblancNo={pbno}",
+            "detail_url":     f"{LIST_PAGES[0]}?pblancNo={pbno}",
             "housing_source": housing_source,
             "priority":       priority,
             "list_mi":        "applyhome",
@@ -95,40 +116,45 @@ def _parse_rows(page: Page, region: str) -> list:
 
 
 def scrape_notices(max_pages: int = 5) -> list:
-    """서울/경기/인천 공고 목록을 수집한다 (지역별 URL 파라미터 필터링)."""
-    results = []
+    """서울/경기/인천 민영 공고를 3개 목록 페이지에서 수집한다."""
+    from urllib.parse import quote
+    results  = []
     seen_ids = set()
 
     with sync_playwright() as pw:
         browser, context, page = _make_browser(pw)
         try:
-            from urllib.parse import quote
             begin_pd = quote(_this_month_param())
-            for region in TARGET_REGIONS:
-                region_url = f"{LIST_URL}?suplyAreaCode={region}&beginPd={begin_pd}"
-                page.goto(region_url, timeout=30000)
-                page.wait_for_load_state("networkidle", timeout=20000)
-                page.wait_for_timeout(1500)
+            for list_url in LIST_PAGES:
+                apt_only = "APTLttotPblanc" in list_url  # APT 분양 페이지만 민영 필터
+                label    = ("APT분양" if "APTLttot" in list_url
+                            else "오피스텔/도시형" if "Other" in list_url
+                            else "APT잔여세대")
 
-                for page_num in range(1, max_pages + 1):
-                    if page_num > 1:
-                        nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
-                        if not nav:
+                for region in TARGET_REGIONS:
+                    url = f"{list_url}?suplyAreaCode={region}&beginPd={begin_pd}"
+                    page.goto(url, timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=20000)
+                    page.wait_for_timeout(1500)
+
+                    for page_num in range(1, max_pages + 1):
+                        if page_num > 1:
+                            nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
+                            if not nav:
+                                break
+                            nav.click()
+                            page.wait_for_load_state("networkidle", timeout=15000)
+                            page.wait_for_timeout(1000)
+
+                        rows_found = _parse_rows(page, region, apt_only=apt_only)
+                        new_rows   = [r for r in rows_found if r["notice_id"] not in seen_ids]
+                        seen_ids.update(r["notice_id"] for r in new_rows)
+                        results.extend(new_rows)
+                        if new_rows:
+                            print(f"  [청약홈/{label}/{region}] {page_num}p: {len(new_rows)}건", file=sys.stderr)
+
+                        if not page.query_selector(f"a[href='?pageIndex={page_num + 1}']"):
                             break
-                        nav.click()
-                        page.wait_for_load_state("networkidle", timeout=15000)
-                        page.wait_for_timeout(1000)
-
-                    rows_found = _parse_rows(page, region)
-                    # 중복 제거 (다른 지역 요청 간)
-                    new_rows = [r for r in rows_found if r["notice_id"] not in seen_ids]
-                    seen_ids.update(r["notice_id"] for r in new_rows)
-                    results.extend(new_rows)
-                    print(f"  [청약홈/{region}] {page_num}p: {len(new_rows)}건", file=sys.stderr)
-
-                    next_btn = page.query_selector(f"a[href='?pageIndex={page_num + 1}']")
-                    if not next_btn:
-                        break
         finally:
             browser.close()
 
@@ -151,24 +177,29 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
     with sync_playwright() as pw:
         browser, context, page = _make_browser(pw)
         try:
-            page.goto(LIST_URL, timeout=30000)
+            page.goto(LIST_PAGES[0], timeout=30000)
             page.wait_for_load_state("networkidle", timeout=20000)
             page.wait_for_timeout(2000)
 
-            # 목록에서 해당 공고 행 찾기 (전체 페이지 순회)
+            # 목록에서 해당 공고 행 찾기 (3개 목록 페이지 순회)
             found = False
-            for page_num in range(1, 15):
-                if page_num > 1:
-                    nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
-                    if not nav:
+            for list_url in LIST_PAGES:
+                page.goto(list_url, timeout=30000)
+                page.wait_for_load_state("networkidle", timeout=20000)
+                page.wait_for_timeout(1500)
+                for page_num in range(1, 15):
+                    if page_num > 1:
+                        nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
+                        if not nav:
+                            break
+                        nav.click()
+                        page.wait_for_load_state("networkidle", timeout=15000)
+                        page.wait_for_timeout(1500)
+                    row = page.query_selector(f"tr[data-pbno='{notice_id}']")
+                    if row:
+                        found = True
                         break
-                    nav.click()
-                    page.wait_for_load_state("networkidle", timeout=15000)
-                    page.wait_for_timeout(1500)
-
-                row = page.query_selector(f"tr[data-pbno='{notice_id}']")
-                if row:
-                    found = True
+                if found:
                     break
 
             if not found:
