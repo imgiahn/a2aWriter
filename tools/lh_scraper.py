@@ -108,14 +108,21 @@ def scrape() -> List[dict]:
 
 def _extract_page_text(page: Page) -> str:
     """현재 페이지(공고 상세)에서 본문 텍스트를 추출한다."""
-    for sel in [".popup_wrap", ".layer_wrap", ".view_wrap", ".detail_wrap",
-                ".bbs_view", ".cont_wrap", "#content .view", "main"]:
-        el = page.query_selector(sel)
-        if el:
-            text = el.inner_text().strip()
-            if len(text) > 200:
-                return text[:6000]
-    return page.inner_text("body").strip()[:6000]
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=10000)
+        for sel in [".popup_wrap", ".layer_wrap", ".view_wrap", ".detail_wrap",
+                    ".bbs_view", ".cont_wrap", "#content .view", "main"]:
+            el = page.query_selector(sel)
+            if el:
+                text = el.inner_text().strip()
+                if len(text) > 200:
+                    return text[:6000]
+        return page.inner_text("body").strip()[:6000]
+    except Exception:
+        try:
+            return page.inner_text("body").strip()[:6000]
+        except Exception:
+            return ""
 
 
 def _get_pdf_file_ids(page: Page) -> List[str]:
@@ -193,8 +200,8 @@ def fetch_detail_with_pdf(notice_id: str, mi: str = "1026") -> dict:
                 return {"text": "", "pdf_text": "", "pdf_filename": ""}
 
             link.click()
-            page.wait_for_load_state("networkidle", timeout=20000)
-            page.wait_for_timeout(2000)
+            page.wait_for_load_state("networkidle", timeout=30000)
+            page.wait_for_timeout(3000)
 
             text = _extract_page_text(page)
 
