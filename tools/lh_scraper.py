@@ -67,7 +67,7 @@ def _scrape_page(page: Page, list_url: str, mi: str, housing_source: str, priori
                 m = _re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", deadline_str)
                 if m:
                     dl = _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                    if dl < today:
+                    if dl <= today:
                         continue
             except Exception:
                 pass
