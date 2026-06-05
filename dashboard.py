@@ -11,17 +11,42 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, send_file, abort
 
 app = Flask(__name__)
 
-TASKS_PLANNED     = Path("tasks/planned")
-TASKS_WRITING     = Path("tasks/writing")
-TASKS_PUBLISHED   = Path("tasks/published")
-TASKS_FAILED      = Path("tasks/failed")
-TASKS_SUGGESTIONS = Path("tasks/suggestions")
-ARTICLES_SUMMARY  = Path("articles/summary")
-DAILY_RATE        = 10
+# ── 블로그별 경로 설정 ─────────────────────────────────────────
+BLOGS = {
+    "mbtireallove": {
+        "label": "MBTI 블로그",
+        "tasks": Path("blogs/mbtireallove/tasks"),
+        "articles": Path("articles/mbtireallove"),
+        "daily_rate": 5,
+    },
+    "llmenginehistory": {
+        "label": "청약 인사이트",
+        "tasks": Path("blogs/llmenginehistory/tasks"),
+        "articles": Path("articles/llmenginehistory"),
+        "daily_rate": 4,
+    },
+}
+
+def _paths(blog: str) -> dict:
+    b = BLOGS[blog]
+    t = b["tasks"]
+    a = b["articles"]
+    return {
+        "planned":     t / "planned",
+        "writing":     t / "writing",
+        "published":   t / "published",
+        "failed":      t / "failed",
+        "suggestions": t / "suggestions",
+        "preview":     a / "preview",
+        "pub_html":    a / "published",
+        "summary":     a / "summary",
+        "daily_rate":  b["daily_rate"],
+        "label":       b["label"],
+    }
 
 
 def parse_task(path: Path) -> dict:
@@ -31,6 +56,8 @@ def parse_task(path: Path) -> dict:
         "series": "-", "created_at": "-",
         "priority": "medium", "template": "default",
         "type": "단편", "parts": "1", "intention": "",
+        "notice_name": "", "region": "", "deadline": "",
+        "apply_end": "", "housing_source": "",
     }
     parts = text.split("---")
     if len(parts) >= 3:
@@ -40,6 +67,9 @@ def parse_task(path: Path) -> dict:
                 data[k.strip()] = v.strip()
         body = "---".join(parts[2:]).strip()
         data["intention"] = re.sub(r"^#+\s*.*$", "", body, flags=re.MULTILINE).strip()
+    # notice_name 있으면 topic 대체
+    if data["notice_name"]:
+        data["topic"] = data["notice_name"]
     return data
 
 
@@ -49,9 +79,13 @@ def load_tasks(folder: Path) -> list:
     return sorted([parse_task(p) for p in folder.glob("*.md")], key=lambda x: x["task_id"])
 
 
-def get_summary(task_id: str) -> str:
-    f = ARTICLES_SUMMARY / f"{task_id}.txt"
+def get_summary(task_id: str, summary_dir: Path) -> str:
+    f = summary_dir / f"{task_id}.txt"
     return f.read_text(encoding="utf-8").strip() if f.exists() else ""
+
+
+def has_preview(task_id: str, preview_dir: Path) -> bool:
+    return (preview_dir / f"{task_id}.html").exists()
 
 
 TEMPLATE = """
@@ -230,7 +264,12 @@ tbody tr:hover td { background: #fafbff; cursor: default; }
 <header>
   <div class="logo">a2a<em>Writer</em></div>
   <div class="live"></div>
-  <span style="color:#94a3b8;font-size:12px;">편집국 대시보드</span>
+  <span style="color:#94a3b8;font-size:12px;">{{ blog_label }}</span>
+  {% for slug, info in blogs.items() %}
+  <a href="/blog/{{ slug }}" style="font-size:12px;padding:4px 10px;border-radius:6px;text-decoration:none;
+    background:{{ '#e0e7ff' if blog == slug else '#f1f5f9' }};
+    color:{{ '#6366f1' if blog == slug else '#64748b' }};">{{ info.label }}</a>
+  {% endfor %}
   <span class="header-right">{{ now }} KST</span>
 </header>
 
@@ -284,16 +323,30 @@ tbody tr:hover td { background: #fafbff; cursor: default; }
   <div id="tab-planned" class="tab-pane active">
     <div class="card">
       <table>
-        <thead><tr><th width="40">#</th><th>주제</th><th>시리즈</th><th>예상 발행일</th></tr></thead>
+        <thead><tr><th width="32">#</th><th>주제</th><th>시리즈</th><th>예상 발행일</th><th width="80"></th></tr></thead>
         <tbody>
           {% for i, t in planned_tasks %}
           <tr>
             <td class="num">{{ i }}</td>
-            <td>{{ t.topic }}</td>
-            <td><span class="badge b-series">{{ t.series }}</span></td>
+            <td>
+              {{ t.topic }}
+              {% if t.region %}<span style="font-size:11px;color:#94a3b8;margin-left:4px;">{{ t.region }}</span>{% endif %}
+            </td>
+            <td><span class="badge b-series">{{ t.series or t.housing_source or '-' }}</span></td>
             <td class="{{ 'dday-soon' if i <= daily_rate else 'dday-ok' }}">
-              +{{ (i-1)//daily_rate }}일
-              ({{ (today + timedelta(days=(i-1)//daily_rate)).strftime('%m/%d') }})
+              {% if t.apply_end or t.deadline %}
+                마감 {{ t.apply_end or t.deadline }}
+              {% else %}
+                +{{ (i-1)//daily_rate }}일 ({{ (today + timedelta(days=(i-1)//daily_rate)).strftime('%m/%d') }})
+              {% endif %}
+            </td>
+            <td>
+              {% if t.has_preview %}
+              <a href="/preview/{{ blog }}/{{ t.task_id }}" target="_blank"
+                 style="font-size:12px;color:#6366f1;text-decoration:none;background:#e0e7ff;padding:3px 9px;border-radius:5px;">미리보기</a>
+              {% else %}
+              <span style="font-size:11px;color:#cbd5e1;">-</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -306,18 +359,20 @@ tbody tr:hover td { background: #fafbff; cursor: default; }
   <div id="tab-published" class="tab-pane">
     <div class="card">
       <table>
-        <thead><tr><th>상태</th><th>주제</th><th>시리즈</th><th>ID</th><th width="80"></th></tr></thead>
+        <thead><tr><th>상태</th><th>주제</th><th>시리즈</th><th>발행일</th><th width="100"></th></tr></thead>
         <tbody>
           {% for t in published_tasks %}
           <tr>
             <td><span class="badge b-pub">발행</span></td>
             <td>{{ t.topic }}</td>
-            <td><span class="badge b-series">{{ t.series }}</span></td>
-            <td style="color:#94a3b8;font-size:12px;">{{ t.task_id }}</td>
-            <td>
+            <td><span class="badge b-series">{{ t.series or t.housing_source or '-' }}</span></td>
+            <td style="color:#94a3b8;font-size:12px;">{{ t.created_at or t.task_id[:8] }}</td>
+            <td style="display:flex;gap:5px;align-items:center;">
+              <a href="/preview/{{ blog }}/{{ t.task_id }}" target="_blank"
+                 style="font-size:11px;color:#6366f1;text-decoration:none;background:#e0e7ff;padding:2px 7px;border-radius:4px;">HTML</a>
               {% if t.summary %}
-              <button class="expand-btn" onclick="toggleSummary('{{ t.task_id }}')">▼ 요약</button>
-              {% else %}<span style="color:#e2e8f0;font-size:11px;">-</span>{% endif %}
+              <button class="expand-btn" onclick="toggleSummary('{{ t.task_id }}')">요약</button>
+              {% endif %}
             </td>
           </tr>
           {% if t.summary %}
@@ -463,31 +518,49 @@ setTimeout(() => location.reload(), 60000);
 
 @app.route("/")
 def index():
-    planned     = load_tasks(TASKS_PLANNED)
-    published   = load_tasks(TASKS_PUBLISHED)
-    writing     = load_tasks(TASKS_WRITING)
-    failed      = load_tasks(TASKS_FAILED)
-    suggestions = load_tasks(TASKS_SUGGESTIONS)
+    return index_blog("mbtireallove")
 
-    total = len(planned) + len(published) + len(writing) + len(failed)
+@app.route("/blog/<blog>")
+def index_blog(blog: str):
+    if blog not in BLOGS:
+        abort(404)
+    p = _paths(blog)
+
+    planned     = load_tasks(p["planned"])
+    published   = load_tasks(p["published"])
+    writing     = load_tasks(p["writing"])
+    failed      = load_tasks(p["failed"])
+    suggestions = load_tasks(p["suggestions"])
+
+    total        = len(planned) + len(published) + len(writing) + len(failed)
     progress_pct = round(len(published) / total * 100) if total else 0
+    daily_rate   = p["daily_rate"]
 
-    dday = math.ceil(len(planned) / DAILY_RATE) if planned else 0
+    dday = math.ceil(len(planned) / daily_rate) if planned else 0
     today = datetime.now().date()
     depletion_date = (datetime.now() + timedelta(days=dday)).strftime("%Y년 %m월 %d일")
     dday_class = "danger" if dday <= 3 else ("warn" if dday <= 7 else "ok")
 
+    # 대기 태스크에 미리보기 여부 추가
+    planned_with_preview = [
+        {**t, "has_preview": has_preview(t["task_id"], p["preview"])}
+        for t in planned
+    ]
+
     published_with_summary = [
-        {**t, "summary": get_summary(t["task_id"])}
+        {**t, "summary": get_summary(t["task_id"], p["summary"])}
         for t in reversed(published)
     ]
 
     return render_template_string(
         TEMPLATE,
+        blog=blog,
+        blog_label=p["label"],
+        blogs=BLOGS,
         now=datetime.now().strftime("%Y-%m-%d %H:%M"),
         today=today,
         timedelta=timedelta,
-        planned_tasks=list(enumerate(planned, 1)),
+        planned_tasks=list(enumerate(planned_with_preview, 1)),
         published_tasks=published_with_summary,
         suggestions=suggestions,
         planned_count=len(planned),
@@ -499,8 +572,62 @@ def index():
         dday=dday,
         dday_class=dday_class,
         depletion_date=depletion_date,
-        daily_rate=DAILY_RATE,
+        daily_rate=daily_rate,
     )
+
+
+@app.route("/preview/<blog>/<task_id>")
+def preview(blog: str, task_id: str):
+    """HTML 미리보기 서빙."""
+    if blog not in BLOGS:
+        abort(404)
+    p = _paths(blog)
+    html_path = p["preview"] / f"{task_id}.html"
+    if not html_path.exists():
+        # preview 없으면 writer --dry-run으로 생성
+        result = subprocess.run(
+            ["venv/bin/python", "agents/writer_agent.py",
+             "--blog", blog,
+             "--task", str(p["planned"] / f"{task_id}.md"),
+             "--dry-run"],
+            capture_output=True, text=True, timeout=120,
+            cwd=Path(__file__).parent,
+        )
+        if not html_path.exists():
+            abort(404)
+    content = html_path.read_text(encoding="utf-8")
+    # TITLE 주석 제거하고 기본 HTML 래핑
+    title_m = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", content)
+    title   = title_m.group(1) if title_m else task_id
+    body    = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", content)
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>
+  body {{ max-width: 780px; margin: 0 auto; padding: 24px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif; font-size: 15px; line-height: 1.8; color: #1a1a1a; }}
+  h2 {{ font-size: 18px; margin: 28px 0 12px; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; }}
+  h3 {{ font-size: 15px; margin: 20px 0 8px; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }}
+  th, td {{ border: 1px solid #ddd; padding: 8px 12px; text-align: center; }}
+  th {{ background: #f5f5f5; }}
+  .toolbar {{ position: sticky; top: 0; background: #1a1a2e; color: #e2e8f0; padding: 10px 20px; display: flex; align-items: center; gap: 16px; font-size: 13px; z-index: 100; }}
+  .toolbar a {{ color: #a5b4fc; text-decoration: none; }}
+  .toolbar a:hover {{ color: #c7d2fe; }}
+  .toolbar .ttl {{ flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <a href="/blog/{blog}">← 목록</a>
+  <span class="ttl">{title}</span>
+  <span style="color:#64748b">{task_id}</span>
+</div>
+<div style="padding-top:12px">{body}</div>
+</body>
+</html>"""
 
 
 @app.route("/api/suggest", methods=["POST"])
@@ -540,16 +667,50 @@ def api_reject(task_id):
 
 
 @app.route("/api/status")
-def api_status():
+@app.route("/api/status/<blog>")
+def api_status(blog: str = "mbtireallove"):
+    if blog not in BLOGS:
+        blog = "mbtireallove"
+    p = _paths(blog)
     def count(folder):
         return len(list(folder.glob("*.md"))) if folder.exists() else 0
     return jsonify({
-        "planned":     count(TASKS_PLANNED),
-        "published":   count(TASKS_PUBLISHED),
-        "writing":     count(TASKS_WRITING),
-        "failed":      count(TASKS_FAILED),
-        "suggestions": count(TASKS_SUGGESTIONS),
+        "planned":     count(p["planned"]),
+        "published":   count(p["published"]),
+        "writing":     count(p["writing"]),
+        "failed":      count(p["failed"]),
+        "suggestions": count(p["suggestions"]),
     })
+
+
+@app.route("/preview/<blog>/<task_id>/published")
+def preview_published(blog: str, task_id: str):
+    """발행된 HTML 서빙."""
+    if blog not in BLOGS:
+        abort(404)
+    p = _paths(blog)
+    html_path = p["pub_html"] / f"{task_id}.html"
+    if not html_path.exists():
+        # preview fallback
+        return preview(blog, task_id)
+    content = html_path.read_text(encoding="utf-8")
+    title_m = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", content)
+    title   = title_m.group(1) if title_m else task_id
+    body    = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", content)
+    return f"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<style>body{{max-width:780px;margin:0 auto;padding:24px 20px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.8;color:#1a1a1a}}
+h2{{font-size:18px;margin:28px 0 12px;border-bottom:2px solid #f0f0f0;padding-bottom:6px}}
+h3{{font-size:15px;margin:20px 0 8px}}
+table{{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}}
+th,td{{border:1px solid #ddd;padding:8px 12px;text-align:center}}
+th{{background:#f5f5f5}}
+.toolbar{{position:sticky;top:0;background:#1a1a2e;color:#e2e8f0;padding:10px 20px;display:flex;align-items:center;gap:16px;font-size:13px}}
+.toolbar a{{color:#a5b4fc;text-decoration:none}}.ttl{{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+</style></head><body>
+<div class="toolbar"><a href="/blog/{blog}">← 목록</a><span class="ttl">{title}</span><span style="color:#22c55e;font-size:11px;">✅ 발행됨</span></div>
+<div style="padding-top:12px">{body}</div></body></html>"""
 
 
 @app.route("/api/run_writer", methods=["POST"])
