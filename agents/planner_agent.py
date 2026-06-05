@@ -3,7 +3,8 @@ Planner Agent
 
 역할: 블로그별 콘텐츠 기획 및 Task 생성
 실행: python agents/planner_agent.py --blog mbtireallove [--suggest]
-      python agents/planner_agent.py --blog llmenginehistory
+      python agents/planner_agent.py --blog llmenginehistory              # LH 청약플러스 (기본)
+      python agents/planner_agent.py --blog llmenginehistory --source applyhome  # 청약홈
 """
 
 import os
@@ -511,6 +512,97 @@ def cheongyak_run(paths: dict):
 
 
 # ─────────────────────────────────────────────
+# 청약홈 전용 로직
+# ─────────────────────────────────────────────
+
+def applyhome_run(paths: dict):
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.applyhome_scraper import scrape_notices, fetch_detail_with_pdf as ah_fetch
+
+    print("=" * 50)
+    print("Planner Agent — llmenginehistory (청약홈)")
+    print("=" * 50)
+
+    existing_ids = get_existing_notice_ids("llmenginehistory")
+    print(f"기존 처리 공고: {len(existing_ids)}건")
+    print("청약홈 서울/경기/인천 공고 수집 중...")
+
+    announcements = scrape_notices()
+    if not announcements:
+        print("⚠️  수집된 공고 없음")
+        return
+
+    print(f"수집: {len(announcements)}건")
+
+    created = 0
+    for item in announcements:
+        notice_id   = item.get("notice_id", "")
+        notice_name = item.get("notice_name", "")
+        supply_type = item.get("supply_type", "")
+        region      = item.get("region", "")
+        notice_date = item.get("notice_date", "")
+        detail_url  = item.get("detail_url", "")
+
+        if not notice_name:
+            continue
+
+        dedup_key = notice_id or notice_name
+        if dedup_key in existing_ids:
+            print(f"  스킵 (중복): {notice_name[:30]}")
+            continue
+
+        housing_source = item.get("housing_source", "분양")
+        task_priority  = item.get("priority", "high")
+        print(f"  상세+PDF 수집 중: [{housing_source}] {notice_name[:30]}...")
+
+        detail      = ah_fetch(notice_id)
+        detail_text = detail["text"]
+        pdf_text    = detail.get("pdf_text", "")
+        pdf_bytes   = detail.get("pdf_bytes", b"")
+        if pdf_text:
+            print(f"    📄 PDF ({len(pdf_text)}자)")
+
+        combined         = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
+        fields           = extract_notice_fields(combined, supply_type)
+        qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
+        scoring_text     = extract_scoring_text(pdf_bytes) if pdf_bytes else ""
+        pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes) or ""
+
+        if qual_tables_html:
+            print(f"    📊 소득기준 표 추출 완료")
+        if scoring_text:
+            print(f"    🎯 배점기준 추출 완료")
+
+        # item에 detail_url 보완
+        item["detail_url"] = detail_url or f"https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancDetail.do?pblancNo={notice_id}"
+        item["notice_date"] = fields.get("notice_date") or notice_date
+
+        category = get_housing_category(supply_type)
+
+        # fields에 없는 값 item에서 보완
+        for key in ("apply_start", "apply_end", "result_date"):
+            if not fields.get(key):
+                pass  # applyhome 상세에서 GPT 추출
+
+        _write_task_file(
+            folder=paths["planned"],
+            task_id=get_next_task_id(paths["planned"]),
+            item=item, fields=fields, category=category,
+            housing_source=housing_source, task_priority=task_priority,
+            pdf_text=pdf_text, qual_tables_html=qual_tables_html,
+            pdf_path=pdf_disk_path, scoring_text=scoring_text,
+        )
+        print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
+        created += 1
+
+    if created == 0:
+        print("새 공고 없음 (모두 기존 Task 존재)")
+    else:
+        print(f"\n✅ {created}개 Task 생성 완료")
+
+
+# ─────────────────────────────────────────────
 # 진입점
 # ─────────────────────────────────────────────
 
@@ -604,6 +696,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--blog",      required=True, help="블로그 이름")
     parser.add_argument("--suggest",   action="store_true", help="AI 주제 제안 모드 (mbtireallove 전용)")
+    parser.add_argument("--source",    default="lh", choices=["lh", "applyhome"], help="수집 소스 (기본: lh)")
     parser.add_argument("--notice-id", dest="notice_id", help="[개발] 공고번호 1건만 처리 → tasks/test/ 저장")
     parser.add_argument("--mi",        default="1026", help="[개발] LH 목록 mi 값 (1026=임대, 1027=분양)")
     args = parser.parse_args()
@@ -620,7 +713,10 @@ if __name__ == "__main__":
         else:
             mbti_run(paths)
     elif args.blog == "llmenginehistory":
-        cheongyak_run(paths)
+        if args.source == "applyhome":
+            applyhome_run(paths)
+        else:
+            cheongyak_run(paths)
     else:
         print(f"❌ 알 수 없는 블로그: {args.blog}")
         sys.exit(1)
