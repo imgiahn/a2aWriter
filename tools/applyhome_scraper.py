@@ -17,6 +17,13 @@ LIST_URL = "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancListView.do"
 TARGET_REGIONS = ["서울", "경기", "인천"]
 
 
+def _this_month_param() -> str:
+    """현재 연월 파라미터 반환 (예: 2026년 06월)."""
+    from datetime import date
+    d = date.today()
+    return f"{d.year}년 {d.month:02d}월"
+
+
 def _make_browser(pw):
     browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
     context = browser.new_context(
@@ -48,6 +55,10 @@ def _parse_rows(page: Page, region: str) -> list:
         notice_date = cells[6].inner_text().strip()
         apply_range = cells[7].inner_text().strip()   # "2026-06-15 ~ 2026-06-17"
         result_date = cells[8].inner_text().strip()
+
+        # 민영만 수집 (국민/공공은 LH 청약플러스에서 처리)
+        if house_secd != "민영":
+            continue
 
         # 마감일 지난 공고 스킵
         if apply_range:
@@ -91,8 +102,10 @@ def scrape_notices(max_pages: int = 5) -> list:
     with sync_playwright() as pw:
         browser, context, page = _make_browser(pw)
         try:
+            from urllib.parse import quote
+            begin_pd = quote(_this_month_param())
             for region in TARGET_REGIONS:
-                region_url = f"{LIST_URL}?suplyAreaCode={region}"
+                region_url = f"{LIST_URL}?suplyAreaCode={region}&beginPd={begin_pd}"
                 page.goto(region_url, timeout=30000)
                 page.wait_for_load_state("networkidle", timeout=20000)
                 page.wait_for_timeout(1500)
