@@ -145,9 +145,10 @@ def scrape_notices(max_pages: int = 5) -> list:
                             nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
                             if not nav:
                                 break
-                            nav.click()
+                            # 로딩 오버레이 무시하고 JS 클릭
+                            page.evaluate("el => el.click()", nav)
                             page.wait_for_load_state("domcontentloaded", timeout=20000)
-                            page.wait_for_timeout(1000)
+                            page.wait_for_timeout(1500)
 
                         rows_found = _parse_rows(page, region, apt_only=apt_only)
                         new_rows   = [r for r in rows_found if r["notice_id"] not in seen_ids]
@@ -195,7 +196,7 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
                         nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
                         if not nav:
                             break
-                        nav.click()
+                        page.evaluate("el => el.click()", nav)
                         page.wait_for_load_state("domcontentloaded", timeout=20000)
                         page.wait_for_timeout(1500)
                     row = page.query_selector(f"tr[data-pbno='{notice_id}']")
