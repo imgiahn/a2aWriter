@@ -1,63 +1,40 @@
 """
-대시보드 — a2aWriter 편집국 현황판
+청약 인사이트 대시보드
 
 EC2에서 실행: python dashboard.py
 접속: http://<EC2_IP>:5001
 """
 
 import re
-import math
-import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from pathlib import Path
-from flask import Flask, jsonify, render_template_string, send_file, abort
+from flask import Flask, jsonify, abort
 
 app = Flask(__name__)
 
-# ── 블로그별 경로 설정 ─────────────────────────────────────────
-BLOGS = {
-    "mbtireallove": {
-        "label": "MBTI 블로그",
-        "tasks": Path("blogs/mbtireallove/tasks"),
-        "articles": Path("articles/mbtireallove"),
-        "daily_rate": 5,
-    },
-    "llmenginehistory": {
-        "label": "청약 인사이트",
-        "tasks": Path("blogs/llmenginehistory/tasks"),
-        "articles": Path("articles/llmenginehistory"),
-        "daily_rate": 4,
-    },
-}
+BLOG        = "llmenginehistory"
+TASKS_DIR   = Path(f"blogs/{BLOG}/tasks")
+ARTICLES    = Path(f"articles/{BLOG}")
+DAILY_RATE  = 4
 
-def _paths(blog: str) -> dict:
-    b = BLOGS[blog]
-    t = b["tasks"]
-    a = b["articles"]
-    return {
-        "planned":     t / "planned",
-        "writing":     t / "writing",
-        "published":   t / "published",
-        "failed":      t / "failed",
-        "suggestions": t / "suggestions",
-        "preview":     a / "preview",
-        "pub_html":    a / "published",
-        "summary":     a / "summary",
-        "daily_rate":  b["daily_rate"],
-        "label":       b["label"],
-    }
 
+# ── 데이터 로딩 ─────────────────────────────────────────────────
 
 def parse_task(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     data = {
-        "task_id": path.stem, "topic": path.stem,
-        "series": "-", "created_at": "-",
-        "priority": "medium", "template": "default",
-        "type": "단편", "parts": "1", "intention": "",
-        "notice_name": "", "region": "", "deadline": "",
-        "apply_end": "", "housing_source": "",
+        "task_id": path.stem,
+        "topic": path.stem,
+        "notice_name": "",
+        "region": "",
+        "apply_end": "",
+        "deadline": "",
+        "housing_source": "",
+        "supply_type": "",
+        "series": "",
+        "created_at": "",
+        "list_mi": "",
     }
     parts = text.split("---")
     if len(parts) >= 3:
@@ -65,1421 +42,387 @@ def parse_task(path: Path) -> dict:
             if ": " in line:
                 k, v = line.split(": ", 1)
                 data[k.strip()] = v.strip()
-        body = "---".join(parts[2:]).strip()
-        data["intention"] = re.sub(r"^#+\s*.*$", "", body, flags=re.MULTILINE).strip()
-    # notice_name 있으면 topic 대체
     if data["notice_name"]:
         data["topic"] = data["notice_name"]
+    data["deadline_date"] = _parse_date(data.get("apply_end") or data.get("deadline", ""))
     return data
 
 
-def load_tasks(folder: Path) -> list:
-    if not folder.exists():
+def _parse_date(s: str):
+    if not s:
+        return None
+    m = re.search(r"(\d{4})[.\-](\d{2})[.\-](\d{2})", s)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except Exception:
+            pass
+    return None
+
+
+def load_tasks(folder: str) -> list:
+    p = TASKS_DIR / folder
+    if not p.exists():
         return []
-    return sorted([parse_task(p) for p in folder.glob("*.md")], key=lambda x: x["task_id"])
+    tasks = [parse_task(f) for f in p.glob("*.md")]
+    return sorted(tasks, key=lambda t: (t.get("deadline_date") or date(9999, 1, 1), t["task_id"]))
 
 
-def get_summary(task_id: str, summary_dir: Path) -> str:
-    f = summary_dir / f"{task_id}.txt"
-    return f.read_text(encoding="utf-8").strip() if f.exists() else ""
+def has_preview(task_id: str) -> bool:
+    return (ARTICLES / "preview" / f"{task_id}.html").exists()
 
 
-def has_preview(task_id: str, preview_dir: Path) -> bool:
-    return (preview_dir / f"{task_id}.html").exists()
+def read_html(path: Path) -> str:
+    if not path.exists():
+        return ""
+    content = path.read_text(encoding="utf-8")
+    title_m = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", content)
+    title   = title_m.group(1) if title_m else path.stem
+    body    = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", content)
+    return title, body
 
 
-TEMPLATE = """
-<!DOCTYPE html>
+def _wrap_html(title: str, body: str, task_id: str, badge: str = "") -> str:
+    return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>a2aWriter 편집국</title>
+<title>{title}</title>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{max-width:800px;margin:0 auto;padding:0 0 60px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.8;color:#1a1a1a}}
+.bar{{position:sticky;top:0;background:#0f172a;color:#e2e8f0;padding:11px 20px;display:flex;align-items:center;gap:12px;font-size:13px;z-index:100;border-bottom:1px solid #1e293b}}
+.bar a{{color:#a5b4fc;text-decoration:none;padding:4px 10px;border-radius:5px;transition:.15s}}
+.bar a:hover{{background:#1e293b}}
+.bar .ttl{{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}}
+.bar .badge{{font-size:11px;padding:2px 8px;border-radius:4px;background:#1e293b;color:#94a3b8}}
+.content{{padding:24px 20px}}
+h2{{font-size:18px;margin:28px 0 12px;border-bottom:2px solid #f0f0f0;padding-bottom:6px}}
+h3{{font-size:15px;margin:20px 0 8px}}
+table{{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}}
+th,td{{border:1px solid #ddd;padding:8px 12px;text-align:center}}
+th{{background:#f5f5f5;font-weight:600}}
+p{{margin:10px 0}}
+ul,ol{{margin:8px 0 8px 20px}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <a href="/">← 목록</a>
+  <span class="ttl">{title}</span>
+  {f'<span class="badge">{badge}</span>' if badge else ''}
+  <span class="badge" style="color:#64748b">{task_id}</span>
+</div>
+<div class="content">{body}</div>
+</body>
+</html>"""
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
-  min-height: 100vh;
-  font-size: 14px;
-}
 
-/* ── Header ── */
-header {
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0 32px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
-}
-.logo { font-size: 17px; font-weight: 800; color: #6366f1; letter-spacing: -.5px; }
-.logo em { color: #0f172a; font-style: normal; }
-.live { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: blink 2s infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
-.header-right { margin-left: auto; color: #94a3b8; font-size: 12px; }
+# ── 라우트 ────────────────────────────────────────────────────
 
-/* ── Layout ── */
-.container { max-width: 1080px; margin: 0 auto; padding: 28px 20px; }
+@app.route("/")
+def index():
+    today    = date.today()
+    planned  = load_tasks("planned")
+    published = load_tasks("published")
+    writing  = load_tasks("writing")
+    failed   = load_tasks("failed")
 
-/* ── KPI ── */
-.kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
-@media(max-width:700px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
-.kpi {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 18px 20px;
-}
-.kpi-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-.kpi-value { font-size: 30px; font-weight: 900; line-height: 1; }
-.kpi-sub { font-size: 11px; color: #94a3b8; margin-top: 5px; }
-.kpi.danger .kpi-value { color: #ef4444; }
-.kpi.warn   .kpi-value { color: #f59e0b; }
-.kpi.ok     .kpi-value { color: #22c55e; }
-.kpi.blue   .kpi-value { color: #6366f1; }
+    # 마감 임박 (3일 이내)
+    urgent = [t for t in planned if t["deadline_date"] and
+              0 < (t["deadline_date"] - today).days <= 3]
 
-/* ── Progress ── */
-.progress-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 16px 20px;
-  margin-bottom: 24px;
-}
-.prog-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.prog-title { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
-.prog-pct { font-size: 22px; font-weight: 800; color: #6366f1; }
-.bar-bg { background: #f1f5f9; border-radius: 99px; height: 7px; }
-.bar-fill { background: linear-gradient(90deg,#a5b4fc,#6366f1); height: 7px; border-radius: 99px; transition: width .6s ease; }
-.prog-foot { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; margin-top: 6px; }
+    # 대기 태스크에 미리보기 여부 추가
+    for t in planned:
+        t["preview"] = has_preview(t["task_id"])
 
-/* ── Tabs ── */
-.tabs { display: flex; gap: 2px; border-bottom: 1.5px solid #e2e8f0; margin-bottom: 20px; }
-.tab-btn {
-  padding: 10px 16px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1.5px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #94a3b8;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  transition: color .15s;
-  white-space: nowrap;
-}
-.tab-btn:hover { color: #475569; }
-.tab-btn.active { color: #6366f1; border-bottom-color: #6366f1; }
-.cnt {
-  background: #f1f5f9; color: #64748b;
-  font-size: 11px; font-weight: 700;
-  padding: 1px 8px; border-radius: 99px;
-}
-.tab-btn.active .cnt { background: #e0e7ff; color: #6366f1; }
-.tab-pane { display: none; }
-.tab-pane.active { display: block; }
+    # 발행 완료 역순 정렬
+    published_rev = list(reversed(published))
 
-/* ── Card/Table ── */
-.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
-table { width: 100%; border-collapse: collapse; }
-thead th {
-  text-align: left;
-  font-size: 11px; font-weight: 600;
-  color: #94a3b8; text-transform: uppercase; letter-spacing: .05em;
-  padding: 11px 16px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-}
-tbody td { padding: 11px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: #fafbff; cursor: default; }
+    now_str = datetime.now().strftime("%Y.%m.%d %H:%M")
 
-.badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; }
-.b-series  { background: #e0e7ff; color: #6366f1; }
-.b-pub     { background: #dcfce7; color: #16a34a; }
-.b-high    { background: #fef3c7; color: #b45309; }
-.b-medium  { background: #f1f5f9; color: #64748b; }
-.b-low     { background: #f1f5f9; color: #94a3b8; }
-.num { color: #cbd5e1; font-size: 12px; }
-.dday-ok   { font-size: 12px; color: #94a3b8; }
-.dday-soon { font-size: 12px; color: #f59e0b; font-weight: 600; }
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>청약 인사이트 대시보드</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;background:#f8fafc;color:#0f172a;min-height:100vh;font-size:14px}}
 
-/* ── Summary row ── */
-.sum-row { display: none; }
-.sum-row.open { display: table-row; }
-.sum-row td { padding: 10px 16px 14px 36px; background: #f8fafc; }
-.sum-text {
-  font-size: 12px; color: #475569; line-height: 1.75;
-  border-left: 3px solid #c7d2fe;
-  padding-left: 12px;
-}
-.expand-btn {
-  background: none; border: none; cursor: pointer;
-  color: #94a3b8; font-size: 12px;
-  padding: 2px 7px; border-radius: 5px;
-  transition: all .12s;
-}
-.expand-btn:hover { background: #f1f5f9; color: #6366f1; }
+/* Header */
+header{{background:#0f172a;padding:0 28px;height:54px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}}
+.logo{{font-size:16px;font-weight:800;color:#a5b4fc;letter-spacing:-.3px}}
+.logo em{{color:#e2e8f0;font-style:normal}}
+.dot{{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:blink 2s infinite}}
+@keyframes blink{{0%,100%{{opacity:1}}50%{{opacity:.2}}}}
+.now{{margin-left:auto;color:#475569;font-size:12px}}
 
-/* ── Suggest tab ── */
-.sugg-toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 13px 16px;
-  border-bottom: 1px solid #e2e8f0;
-}
-.sugg-toolbar-title { font-size: 13px; font-weight: 600; color: #475569; }
-.btn-primary {
-  background: #6366f1; color: #fff;
-  border: none; border-radius: 8px;
-  padding: 7px 16px; font-size: 13px; font-weight: 600;
-  cursor: pointer; display: flex; align-items: center; gap: 6px;
-  transition: background .15s;
-}
-.btn-primary:hover { background: #4f46e5; }
-.btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
-.btn-ok  { background: #dcfce7; color: #16a34a; border: none; border-radius: 7px; padding: 5px 13px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.btn-ok:hover { background: #bbf7d0; }
-.btn-no  { background: #fee2e2; color: #ef4444; border: none; border-radius: 7px; padding: 5px 13px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.btn-no:hover { background: #fecaca; }
-.intent { font-size: 11px; color: #64748b; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.empty { padding: 52px 20px; text-align: center; color: #94a3b8; font-size: 13px; line-height: 2; }
+/* Container */
+.wrap{{max-width:1100px;margin:0 auto;padding:24px 20px}}
 
-.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+/* KPI */
+.kpi-row{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}}
+@media(max-width:700px){{.kpi-row{{grid-template-columns:repeat(2,1fr)}}}}
+.kpi{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px}}
+.kpi-label{{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}}
+.kpi-val{{font-size:28px;font-weight:900;line-height:1}}
+.kpi-sub{{font-size:11px;color:#94a3b8;margin-top:4px}}
+.c-blue{{color:#6366f1}}.c-green{{color:#22c55e}}.c-orange{{color:#f59e0b}}.c-red{{color:#ef4444}}
+
+/* Tabs */
+.tabs{{display:flex;gap:2px;border-bottom:2px solid #e2e8f0;margin-bottom:16px}}
+.tab{{padding:9px 18px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+      font-size:13px;font-weight:600;color:#94a3b8;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:6px}}
+.tab:hover{{color:#475569}}
+.tab.on{{color:#6366f1;border-bottom-color:#6366f1}}
+.cnt{{background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px}}
+.tab.on .cnt{{background:#e0e7ff;color:#6366f1}}
+.pane{{display:none}}.pane.on{{display:block}}
+
+/* Table */
+.card{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}}
+table{{width:100%;border-collapse:collapse}}
+thead th{{text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;
+          letter-spacing:.04em;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}}
+tbody td{{padding:10px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle}}
+tbody tr:last-child td{{border-bottom:none}}
+tbody tr:hover td{{background:#fafbff}}
+
+/* Badges */
+.badge{{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}}
+.b-sale{{background:#dbeafe;color:#1d4ed8}}
+.b-rent{{background:#dcfce7;color:#15803d}}
+.b-region{{background:#f1f5f9;color:#475569}}
+.b-lh{{background:#fef3c7;color:#b45309}}
+.b-ah{{background:#fce7f3;color:#be185d}}
+.b-apt{{background:#ede9fe;color:#6d28d9}}
+.b-other{{background:#fff7ed;color:#c2410c}}
+
+/* Deadline */
+.dl-ok{{color:#94a3b8;font-size:12px}}
+.dl-soon{{color:#f59e0b;font-weight:700;font-size:12px}}
+.dl-urgent{{color:#ef4444;font-weight:700;font-size:12px;animation:pulse 1.5s infinite}}
+@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.5}}}}
+
+/* Buttons */
+.btn-preview{{font-size:11px;color:#6366f1;text-decoration:none;background:#e0e7ff;
+              padding:3px 9px;border-radius:5px;white-space:nowrap;transition:.15s}}
+.btn-preview:hover{{background:#c7d2fe}}
+.empty{{padding:48px;text-align:center;color:#94a3b8;font-size:13px;line-height:2}}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">a2a<em>Writer</em></div>
-  <div class="live"></div>
-  <span style="color:#94a3b8;font-size:12px;">{{ blog_label }}</span>
-  {% for slug, info in blogs.items() %}
-  <a href="/blog/{{ slug }}" style="font-size:12px;padding:4px 10px;border-radius:6px;text-decoration:none;
-    background:{{ '#e0e7ff' if blog == slug else '#f1f5f9' }};
-    color:{{ '#6366f1' if blog == slug else '#64748b' }};">{{ info.label }}</a>
-  {% endfor %}
-  <span class="header-right">{{ now }} KST</span>
+  <span class="logo">청약<em>인사이트</em></span>
+  <div class="dot"></div>
+  <span style="color:#475569;font-size:12px">파이프라인 대시보드</span>
+  <span class="now">{now_str}</span>
 </header>
 
-<div class="container">
+<div class="wrap">
 
   <!-- KPI -->
-  <div class="kpi-grid">
-    <div class="kpi {{ dday_class }}">
-      <div class="kpi-label">소재 소멸까지</div>
-      <div class="kpi-value">D-{{ dday }}</div>
-      <div class="kpi-sub">{{ depletion_date }} 예상</div>
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">발행 대기</div>
+      <div class="kpi-val c-blue">{len(planned)}</div>
+      <div class="kpi-sub">하루 {DAILY_RATE}개 기준 {_dday(len(planned), DAILY_RATE)}</div>
     </div>
-    <div class="kpi blue">
-      <div class="kpi-label">대기 소재</div>
-      <div class="kpi-value">{{ planned_count }}</div>
-      <div class="kpi-sub">하루 {{ daily_rate }}개 발행</div>
-    </div>
-    <div class="kpi ok">
+    <div class="kpi">
       <div class="kpi-label">발행 완료</div>
-      <div class="kpi-value">{{ published_count }}</div>
-      <div class="kpi-sub">총 {{ total_count }}개 중</div>
+      <div class="kpi-val c-green">{len(published)}</div>
+      <div class="kpi-sub">총 {len(planned)+len(published)+len(writing)+len(failed)}건 중</div>
     </div>
-    <div class="kpi {% if failed_count > 0 %}warn{% else %}ok{% endif %}">
-      <div class="kpi-label">실패 / 작성 중</div>
-      <div class="kpi-value">{{ failed_count }}/{{ writing_count }}</div>
-      <div class="kpi-sub">failed / writing</div>
+    <div class="kpi">
+      <div class="kpi-label">마감 임박 (3일)</div>
+      <div class="kpi-val {'c-red' if urgent else 'c-orange'}">{len(urgent)}</div>
+      <div class="kpi-sub">{"우선 발행 필요" if urgent else "여유 있음"}</div>
     </div>
-  </div>
-
-  <!-- Progress -->
-  <div class="progress-card">
-    <div class="prog-header">
-      <span class="prog-title">전체 발행 진행률</span>
-      <span class="prog-pct">{{ progress_pct }}%</span>
-    </div>
-    <div class="bar-bg"><div class="bar-fill" style="width:{{ progress_pct }}%"></div></div>
-    <div class="prog-foot">
-      <span>{{ published_count }}개 발행</span>
-      <span>{{ planned_count }}개 남음</span>
+    <div class="kpi">
+      <div class="kpi-label">작성중 / 실패</div>
+      <div class="kpi-val c-orange">{len(writing)}<span style="font-size:16px;color:#cbd5e1"> / </span>{len(failed)}</div>
+      <div class="kpi-sub">writing / failed</div>
     </div>
   </div>
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="planned">대기 소재 <span class="cnt">{{ planned_count }}</span></button>
-    <button class="tab-btn" data-tab="published">발행 완료 <span class="cnt">{{ published_count }}</span></button>
-    <button class="tab-btn" data-tab="suggest">편집장 승인 <span class="cnt">{{ suggestions|length }}</span></button>
+    <button class="tab on" data-tab="planned">발행 대기 <span class="cnt">{len(planned)}</span></button>
+    <button class="tab" data-tab="published">발행 완료 <span class="cnt">{len(published)}</span></button>
   </div>
 
-  <!-- Tab: 대기 소재 -->
-  <div id="tab-planned" class="tab-pane active">
+  <!-- 대기 -->
+  <div id="tab-planned" class="pane on">
     <div class="card">
-      <table>
-        <thead><tr><th width="32">#</th><th>주제</th><th>시리즈</th><th>예상 발행일</th><th width="80"></th></tr></thead>
-        <tbody>
-          {% for i, t in planned_tasks %}
-          <tr>
-            <td class="num">{{ i }}</td>
-            <td>
-              {{ t.topic }}
-              {% if t.region %}<span style="font-size:11px;color:#94a3b8;margin-left:4px;">{{ t.region }}</span>{% endif %}
-            </td>
-            <td><span class="badge b-series">{{ t.series or t.housing_source or '-' }}</span></td>
-            <td class="{{ 'dday-soon' if i <= daily_rate else 'dday-ok' }}">
-              {% if t.apply_end or t.deadline %}
-                마감 {{ t.apply_end or t.deadline }}
-              {% else %}
-                +{{ (i-1)//daily_rate }}일 ({{ (today + timedelta(days=(i-1)//daily_rate)).strftime('%m/%d') }})
-              {% endif %}
-            </td>
-            <td>
-              {% if t.has_preview %}
-              <a href="/preview/{{ blog }}/{{ t.task_id }}" target="_blank"
-                 style="font-size:12px;color:#6366f1;text-decoration:none;background:#e0e7ff;padding:3px 9px;border-radius:5px;">미리보기</a>
-              {% else %}
-              <span style="font-size:11px;color:#cbd5e1;">-</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {"<table><thead><tr><th>#</th><th>공고명</th><th>구분</th><th>지역</th><th>청약 마감</th><th></th></tr></thead><tbody>"
+        + "".join(_planned_row(i+1, t, today) for i, t in enumerate(planned))
+        + "</tbody></table>" if planned else '<div class="empty">대기 중인 공고가 없어요.<br>내일 아침 6~7시 수집 후 추가됩니다.</div>'}
     </div>
   </div>
 
-  <!-- Tab: 발행 완료 -->
-  <div id="tab-published" class="tab-pane">
+  <!-- 발행 완료 -->
+  <div id="tab-published" class="pane">
     <div class="card">
-      <table>
-        <thead><tr><th>상태</th><th>주제</th><th>시리즈</th><th>발행일</th><th width="100"></th></tr></thead>
-        <tbody>
-          {% for t in published_tasks %}
-          <tr>
-            <td><span class="badge b-pub">발행</span></td>
-            <td>{{ t.topic }}</td>
-            <td><span class="badge b-series">{{ t.series or t.housing_source or '-' }}</span></td>
-            <td style="color:#94a3b8;font-size:12px;">{{ t.created_at or t.task_id[:8] }}</td>
-            <td style="display:flex;gap:5px;align-items:center;">
-              <a href="/preview/{{ blog }}/{{ t.task_id }}" target="_blank"
-                 style="font-size:11px;color:#6366f1;text-decoration:none;background:#e0e7ff;padding:2px 7px;border-radius:4px;">HTML</a>
-              {% if t.summary %}
-              <button class="expand-btn" onclick="toggleSummary('{{ t.task_id }}')">요약</button>
-              {% endif %}
-            </td>
-          </tr>
-          {% if t.summary %}
-          <tr class="sum-row" id="sum-{{ t.task_id }}">
-            <td colspan="5"><div class="sum-text">{{ t.summary }}</div></td>
-          </tr>
-          {% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Tab: 편집장 승인 -->
-  <div id="tab-suggest" class="tab-pane">
-    <div class="card">
-      <div class="sugg-toolbar">
-        <span class="sugg-toolbar-title">AI 기획 제안 — 승인하면 대기열에 추가됩니다</span>
-        <button class="btn-primary" id="suggest-btn" onclick="requestSuggest()">
-          ✨ 새 주제 기획 요청
-        </button>
-      </div>
-      <table>
-        <thead>
-          <tr><th>주제</th><th>시리즈</th><th>형태</th><th>우선순위</th><th width="140"></th></tr>
-        </thead>
-        <tbody id="suggest-body">
-          {% if suggestions %}
-            {% for t in suggestions %}
-            <tr id="sugg-{{ t.task_id }}" style="cursor:pointer;" onclick="toggleOutline('{{ t.task_id }}')">
-              <td>
-                <strong>{{ t.topic }}</strong>
-                <div style="font-size:11px;color:#94a3b8;margin-top:2px;">▼ 클릭해서 개요 보기</div>
-              </td>
-              <td><span class="badge b-series">{{ t.series }}</span></td>
-              <td>
-                {% set ctype = t.get('type', '단편') %}
-                {% set parts = t.get('parts', 1)|int %}
-                <span class="badge {{ 'b-high' if ctype == '시리즈' else 'b-medium' }}">
-                  {{ ctype }}{% if ctype == '시리즈' and parts > 1 %} {{ parts }}부작{% endif %}
-                </span>
-              </td>
-              <td><span class="badge b-{{ t.priority }}">{{ t.priority }}</span></td>
-              <td onclick="event.stopPropagation()" style="display:flex;gap:6px;padding:10px 16px;">
-                <button class="btn-ok" onclick="approve('{{ t.task_id }}')">✅ 승인</button>
-                <button class="btn-no" onclick="reject('{{ t.task_id }}')">✕</button>
-              </td>
-            </tr>
-            <tr class="sum-row" id="outline-{{ t.task_id }}">
-              <td colspan="5">
-                <div class="sum-text" style="white-space:pre-wrap;">{{ t.intention }}</div>
-              </td>
-            </tr>
-            {% endfor %}
-          {% else %}
-          <tr id="empty-row">
-            <td colspan="5" class="empty">
-              제안된 주제가 없습니다.<br>위 버튼을 눌러 AI에게 새 주제 기획을 요청해보세요.
-            </td>
-          </tr>
-          {% endif %}
-        </tbody>
-      </table>
+      {"<table><thead><tr><th>발행일</th><th>제목</th><th>구분</th><th>지역</th><th></th></tr></thead><tbody>"
+        + "".join(_published_row(t) for t in published_rev)
+        + "</tbody></table>" if published_rev else '<div class="empty">발행된 글이 없어요.</div>'}
     </div>
   </div>
 
 </div>
 
 <script>
-// 탭 전환
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-  });
-});
-
-// 요약 / 개요 펼치기
-function toggleSummary(id) {
-  const row = document.getElementById('sum-' + id);
-  if (row) row.classList.toggle('open');
-}
-function toggleOutline(id) {
-  const row = document.getElementById('outline-' + id);
-  if (row) row.classList.toggle('open');
-}
-
-// 새 주제 제안 요청
-async function requestSuggest() {
-  const btn = document.getElementById('suggest-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> 생성 중...';
-  try {
-    const res = await fetch('/api/suggest', { method: 'POST' });
-    const data = await res.json();
-    if (data.ok) { location.reload(); }
-    else { alert('오류: ' + (data.error || '알 수 없는 오류')); }
-  } catch(e) {
-    alert('요청 실패: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '✨ 새 주제 제안 요청';
-  }
-}
-
-// 승인
-async function approve(id) {
-  const res = await fetch('/api/approve/' + id, { method: 'POST' });
-  const data = await res.json();
-  if (data.ok) {
-    document.getElementById('sugg-' + id)?.remove();
-    checkEmpty();
-  } else { alert('오류: ' + (data.error || '')); }
-}
-
-// 거절
-async function reject(id) {
-  const res = await fetch('/api/reject/' + id, { method: 'POST' });
-  if ((await res.json()).ok) {
-    document.getElementById('sugg-' + id)?.remove();
-    checkEmpty();
-  }
-}
-
-function checkEmpty() {
-  const rows = document.querySelectorAll('#suggest-body tr[id^="sugg-"]');
-  if (rows.length === 0) {
-    document.getElementById('suggest-body').innerHTML =
-      '<tr id="empty-row"><td colspan="5" class="empty">제안된 주제가 없습니다.<br>위 버튼을 눌러 AI에게 새 주제를 제안받아 보세요.</td></tr>';
-  }
-}
-
-// 60초마다 자동 갱신
+document.querySelectorAll('.tab').forEach(btn => {{
+  btn.addEventListener('click', () => {{
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+    btn.classList.add('on');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('on');
+  }});
+}});
 setTimeout(() => location.reload(), 60000);
 </script>
-
-</body>
-</html>
-"""
-
-
-@app.route("/")
-def index():
-    return index_blog("mbtireallove")
-
-@app.route("/blog/<blog>")
-def index_blog(blog: str):
-    if blog not in BLOGS:
-        abort(404)
-    p = _paths(blog)
-
-    planned     = load_tasks(p["planned"])
-    published   = load_tasks(p["published"])
-    writing     = load_tasks(p["writing"])
-    failed      = load_tasks(p["failed"])
-    suggestions = load_tasks(p["suggestions"])
-
-    total        = len(planned) + len(published) + len(writing) + len(failed)
-    progress_pct = round(len(published) / total * 100) if total else 0
-    daily_rate   = p["daily_rate"]
-
-    dday = math.ceil(len(planned) / daily_rate) if planned else 0
-    today = datetime.now().date()
-    depletion_date = (datetime.now() + timedelta(days=dday)).strftime("%Y년 %m월 %d일")
-    dday_class = "danger" if dday <= 3 else ("warn" if dday <= 7 else "ok")
-
-    # 대기 태스크에 미리보기 여부 추가
-    planned_with_preview = [
-        {**t, "has_preview": has_preview(t["task_id"], p["preview"])}
-        for t in planned
-    ]
-
-    published_with_summary = [
-        {**t, "summary": get_summary(t["task_id"], p["summary"])}
-        for t in reversed(published)
-    ]
-
-    return render_template_string(
-        TEMPLATE,
-        blog=blog,
-        blog_label=p["label"],
-        blogs=BLOGS,
-        now=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        today=today,
-        timedelta=timedelta,
-        planned_tasks=list(enumerate(planned_with_preview, 1)),
-        published_tasks=published_with_summary,
-        suggestions=suggestions,
-        planned_count=len(planned),
-        published_count=len(published),
-        writing_count=len(writing),
-        failed_count=len(failed),
-        total_count=total,
-        progress_pct=progress_pct,
-        dday=dday,
-        dday_class=dday_class,
-        depletion_date=depletion_date,
-        daily_rate=daily_rate,
-    )
-
-
-@app.route("/preview/<blog>/<task_id>")
-def preview(blog: str, task_id: str):
-    """HTML 미리보기 서빙."""
-    if blog not in BLOGS:
-        abort(404)
-    p = _paths(blog)
-    html_path = p["preview"] / f"{task_id}.html"
-    if not html_path.exists():
-        # preview 없으면 writer --dry-run으로 생성
-        result = subprocess.run(
-            ["venv/bin/python", "agents/writer_agent.py",
-             "--blog", blog,
-             "--task", str(p["planned"] / f"{task_id}.md"),
-             "--dry-run"],
-            capture_output=True, text=True, timeout=120,
-            cwd=Path(__file__).parent,
-        )
-        if not html_path.exists():
-            abort(404)
-    content = html_path.read_text(encoding="utf-8")
-    # TITLE 주석 제거하고 기본 HTML 래핑
-    title_m = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", content)
-    title   = title_m.group(1) if title_m else task_id
-    body    = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", content)
-    return f"""<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{title}</title>
-<style>
-  body {{ max-width: 780px; margin: 0 auto; padding: 24px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif; font-size: 15px; line-height: 1.8; color: #1a1a1a; }}
-  h2 {{ font-size: 18px; margin: 28px 0 12px; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; }}
-  h3 {{ font-size: 15px; margin: 20px 0 8px; }}
-  table {{ border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }}
-  th, td {{ border: 1px solid #ddd; padding: 8px 12px; text-align: center; }}
-  th {{ background: #f5f5f5; }}
-  .toolbar {{ position: sticky; top: 0; background: #1a1a2e; color: #e2e8f0; padding: 10px 20px; display: flex; align-items: center; gap: 16px; font-size: 13px; z-index: 100; }}
-  .toolbar a {{ color: #a5b4fc; text-decoration: none; }}
-  .toolbar a:hover {{ color: #c7d2fe; }}
-  .toolbar .ttl {{ flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-</style>
-</head>
-<body>
-<div class="toolbar">
-  <a href="/blog/{blog}">← 목록</a>
-  <span class="ttl">{title}</span>
-  <span style="color:#64748b">{task_id}</span>
-</div>
-<div style="padding-top:12px">{body}</div>
 </body>
 </html>"""
 
 
-@app.route("/api/suggest", methods=["POST"])
-def api_suggest():
-    try:
-        result = subprocess.run(
-            ["venv/bin/python", "agents/planner_agent.py", "--suggest"],
-            capture_output=True, text=True, timeout=90,
-            cwd=Path(__file__).parent,
-        )
-        if result.returncode == 0:
-            return jsonify({"ok": True})
-        return jsonify({"ok": False, "error": result.stderr or result.stdout}), 500
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+def _dday(n, rate):
+    if n == 0:
+        return "소재 없음"
+    d = (n + rate - 1) // rate
+    return f"약 {d}일치"
 
 
-@app.route("/api/approve/<task_id>", methods=["POST"])
-def api_approve(task_id):
-    TASKS_SUGGESTIONS.mkdir(exist_ok=True)
-    TASKS_PLANNED.mkdir(exist_ok=True)
-    src = TASKS_SUGGESTIONS / f"{task_id}.md"
-    if not src.exists():
-        return jsonify({"ok": False, "error": "파일 없음"}), 404
-    content = src.read_text(encoding="utf-8").replace("status: suggestion", "status: planned")
-    (TASKS_PLANNED / f"{task_id}.md").write_text(content, encoding="utf-8")
-    src.unlink()
-    return jsonify({"ok": True})
+def _supply_badge(t: dict) -> str:
+    hs = t.get("housing_source", "")
+    st = t.get("supply_type", "")
+    mi = t.get("list_mi", "")
+
+    badges = []
+    # 소스
+    if mi == "applyhome" or "applyhome" in str(t.get("detail_url", "")):
+        badges.append('<span class="badge b-ah">청약홈</span>')
+    elif mi in ("1026", "1027") or "lh.or.kr" in str(t.get("detail_url", "")):
+        badges.append('<span class="badge b-lh">LH</span>')
+
+    # 분양/임대
+    if hs == "분양":
+        badges.append('<span class="badge b-sale">분양</span>')
+    elif hs == "임대":
+        badges.append('<span class="badge b-rent">임대</span>')
+
+    # 주택 유형
+    if "오피스텔" in st or "도시형" in st:
+        badges.append('<span class="badge b-other">오피스텔</span>')
+    elif "잔여" in st or "임의" in st:
+        badges.append('<span class="badge b-other">잔여세대</span>')
+    elif "APT" in st.upper() or "아파트" in st or not st:
+        pass  # 기본은 표시 안 함
+
+    return " ".join(badges) if badges else '<span class="badge b-region">-</span>'
 
 
-@app.route("/api/reject/<task_id>", methods=["POST"])
-def api_reject(task_id):
-    src = TASKS_SUGGESTIONS / f"{task_id}.md"
-    if src.exists():
-        src.unlink()
-    return jsonify({"ok": True})
+def _deadline_html(t: dict, today: date) -> str:
+    dl = t.get("deadline_date")
+    dl_str = t.get("apply_end") or t.get("deadline", "")
+    if not dl:
+        return f'<span class="dl-ok">{dl_str or "-"}</span>'
+    diff = (dl - today).days
+    if diff <= 3:
+        cls = "dl-urgent"
+        suffix = f"D-{diff}" if diff > 0 else "오늘마감"
+    elif diff <= 7:
+        cls = "dl-soon"
+        suffix = f"D-{diff}"
+    else:
+        cls = "dl-ok"
+        suffix = f"D-{diff}"
+    return f'<span class="{cls}">{dl_str}<br>{suffix}</span>'
+
+
+def _planned_row(i: int, t: dict, today: date) -> str:
+    name    = t["topic"][:40] + ("…" if len(t["topic"]) > 40 else "")
+    region  = f'<span class="badge b-region">{t["region"]}</span>' if t["region"] else ""
+    dl_html = _deadline_html(t, today)
+    badges  = _supply_badge(t)
+    preview = (f'<a class="btn-preview" href="/preview/{t["task_id"]}" target="_blank">미리보기</a>'
+               if t["preview"] else '<span style="color:#e2e8f0;font-size:11px">-</span>')
+    return (f"<tr>"
+            f"<td style='color:#cbd5e1;font-size:12px'>{i}</td>"
+            f"<td><strong style='font-size:13px'>{name}</strong></td>"
+            f"<td>{badges}</td>"
+            f"<td>{region}</td>"
+            f"<td>{dl_html}</td>"
+            f"<td>{preview}</td>"
+            f"</tr>")
+
+
+def _published_row(t: dict) -> str:
+    name   = t["topic"][:45] + ("…" if len(t["topic"]) > 45 else "")
+    region = f'<span class="badge b-region">{t["region"]}</span>' if t["region"] else ""
+    badges = _supply_badge(t)
+    date_s = t.get("created_at") or t["task_id"][:8]
+    btn    = f'<a class="btn-preview" href="/preview/{t["task_id"]}" target="_blank">HTML 보기</a>'
+    return (f"<tr>"
+            f"<td style='color:#94a3b8;font-size:12px'>{date_s}</td>"
+            f"<td><span style='font-size:13px'>{name}</span></td>"
+            f"<td>{badges}</td>"
+            f"<td>{region}</td>"
+            f"<td>{btn}</td>"
+            f"</tr>")
+
+
+@app.route("/preview/<task_id>")
+def preview(task_id: str):
+    """대기 중 공고 HTML 미리보기."""
+    html_path = ARTICLES / "preview" / f"{task_id}.html"
+
+    # preview 없으면 planned에서 writer --dry-run 생성 시도
+    if not html_path.exists():
+        task_path = TASKS_DIR / "planned" / f"{task_id}.md"
+        if not task_path.exists():
+            task_path = TASKS_DIR / "published" / f"{task_id}.md"
+        if task_path.exists():
+            subprocess.run(
+                ["venv/bin/python", "agents/writer_agent.py",
+                 "--blog", BLOG, "--task", str(task_path), "--dry-run"],
+                capture_output=True, timeout=120,
+                cwd=Path(__file__).parent,
+            )
+    if not html_path.exists():
+        # published HTML fallback
+        html_path = ARTICLES / "published" / f"{task_id}.html"
+    if not html_path.exists():
+        abort(404)
+
+    result = read_html(html_path)
+    if not result:
+        abort(404)
+    title, body = result
+
+    # published 여부
+    is_pub = (TASKS_DIR / "published" / f"{task_id}.md").exists()
+    badge  = "✅ 발행됨" if is_pub else "⏳ 대기 중"
+
+    return _wrap_html(title, body, task_id, badge)
 
 
 @app.route("/api/status")
-@app.route("/api/status/<blog>")
-def api_status(blog: str = "mbtireallove"):
-    if blog not in BLOGS:
-        blog = "mbtireallove"
-    p = _paths(blog)
+def api_status():
     def count(folder):
-        return len(list(folder.glob("*.md"))) if folder.exists() else 0
+        p = TASKS_DIR / folder
+        return len(list(p.glob("*.md"))) if p.exists() else 0
     return jsonify({
-        "planned":     count(p["planned"]),
-        "published":   count(p["published"]),
-        "writing":     count(p["writing"]),
-        "failed":      count(p["failed"]),
-        "suggestions": count(p["suggestions"]),
+        "planned":     count("planned"),
+        "published":   count("published"),
+        "writing":     count("writing"),
+        "failed":      count("failed"),
+        "suggestions": count("suggestions"),
     })
-
-
-@app.route("/preview/<blog>/<task_id>/published")
-def preview_published(blog: str, task_id: str):
-    """발행된 HTML 서빙."""
-    if blog not in BLOGS:
-        abort(404)
-    p = _paths(blog)
-    html_path = p["pub_html"] / f"{task_id}.html"
-    if not html_path.exists():
-        # preview fallback
-        return preview(blog, task_id)
-    content = html_path.read_text(encoding="utf-8")
-    title_m = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", content)
-    title   = title_m.group(1) if title_m else task_id
-    body    = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", content)
-    return f"""<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title}</title>
-<style>body{{max-width:780px;margin:0 auto;padding:24px 20px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.8;color:#1a1a1a}}
-h2{{font-size:18px;margin:28px 0 12px;border-bottom:2px solid #f0f0f0;padding-bottom:6px}}
-h3{{font-size:15px;margin:20px 0 8px}}
-table{{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}}
-th,td{{border:1px solid #ddd;padding:8px 12px;text-align:center}}
-th{{background:#f5f5f5}}
-.toolbar{{position:sticky;top:0;background:#1a1a2e;color:#e2e8f0;padding:10px 20px;display:flex;align-items:center;gap:16px;font-size:13px}}
-.toolbar a{{color:#a5b4fc;text-decoration:none}}.ttl{{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-</style></head><body>
-<div class="toolbar"><a href="/blog/{blog}">← 목록</a><span class="ttl">{title}</span><span style="color:#22c55e;font-size:11px;">✅ 발행됨</span></div>
-<div style="padding-top:12px">{body}</div></body></html>"""
-
-
-@app.route("/api/run_writer", methods=["POST"])
-def api_run_writer():
-    try:
-        result = subprocess.run(
-            ["venv/bin/python", "agents/writer_agent.py"],
-            capture_output=True, text=True, timeout=120,
-            cwd=Path(__file__).parent,
-        )
-        ok = result.returncode == 0
-        return jsonify({"ok": ok, "output": result.stdout, "error": result.stderr})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/run_publisher", methods=["POST"])
-def api_run_publisher():
-    try:
-        result = subprocess.run(
-            ["venv/bin/python", "agents/publisher_agent.py"],
-            capture_output=True, text=True, timeout=180,
-            cwd=Path(__file__).parent,
-            env={**__import__("os").environ, "SERVER_MODE": "1"},
-        )
-        ok = result.returncode == 0
-        return jsonify({"ok": ok, "output": result.stdout, "error": result.stderr})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-DESK_TEMPLATE = r"""<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>a2aWriter 편집국</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  background: #070b14;
-  min-height: 100vh;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  font-family: 'Black Han Sans', 'Noto Sans KR', sans-serif;
-  color: #e2e8f0;
-  overflow: hidden;
-}
-
-/* Star background */
-body::before {
-  content: '';
-  position: fixed; inset: 0;
-  background-image:
-    radial-gradient(1px 1px at 10% 20%, #ffffff22, transparent),
-    radial-gradient(1px 1px at 80% 10%, #ffffff15, transparent),
-    radial-gradient(1px 1px at 60% 70%, #ffffff10, transparent),
-    radial-gradient(1px 1px at 30% 80%, #ffffff18, transparent),
-    radial-gradient(1px 1px at 90% 60%, #ffffff12, transparent);
-  pointer-events: none;
-}
-
-header {
-  width: 100%;
-  max-width: 1000px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 24px 8px;
-}
-.logo {
-  font-size: 22px;
-  color: #a78bfa;
-  text-shadow: 0 0 12px #7c3aed, 0 0 24px #7c3aed;
-  letter-spacing: 2px;
-}
-.back-btn {
-  margin-left: auto;
-  font-family: 'Black Han Sans', 'Noto Sans KR', sans-serif;
-  font-size: 15px;
-  background: transparent;
-  color: #475569;
-  border: 1px solid #1e293b;
-  border-radius: 4px;
-  padding: 7px 16px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all .2s;
-}
-.back-btn:hover { color: #94a3b8; border-color: #334155; }
-
-canvas {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  cursor: pointer;
-  border: 2px solid #1e293b;
-  box-shadow:
-    0 0 30px rgba(99,102,241,.15),
-    0 0 60px rgba(99,102,241,.08),
-    inset 0 0 30px rgba(0,0,0,.3);
-  border-radius: 6px;
-  max-width: 100vw;
-}
-
-.hint {
-  font-size: 13px;
-  color: #1e293b;
-  margin-top: 10px;
-  letter-spacing: 3px;
-}
-
-/* ── Dialog ── */
-.dialog-overlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.7);
-  backdrop-filter: blur(4px);
-  z-index: 100;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 40px;
-}
-.dialog-overlay.open { display: flex; }
-
-.dialog {
-  background: #0d1117;
-  border: 2px solid #1e293b;
-  border-radius: 0;
-  width: 680px;
-  max-width: 96vw;
-  animation: slideUp .2s cubic-bezier(.16,1,.3,1);
-  position: relative;
-  overflow: hidden;
-}
-.dialog::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0;
-  height: 2px;
-}
-.dialog.planner-dialog::before { background: linear-gradient(90deg, #6366f1, #a78bfa, #6366f1); box-shadow: 0 0 12px #6366f1; }
-.dialog.writer-dialog::before  { background: linear-gradient(90deg, #10b981, #6ee7b7, #10b981); box-shadow: 0 0 12px #10b981; }
-
-@keyframes slideUp {
-  from { transform: translateY(30px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
-}
-
-.dialog-inner { padding: 24px 28px; }
-
-.dialog-top {
-  display: flex; gap: 20px; align-items: flex-start;
-  margin-bottom: 20px;
-}
-.dialog-portrait {
-  width: 64px; height: 64px;
-  border: 2px solid #1e293b;
-  border-radius: 4px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 28px;
-  flex-shrink: 0;
-  background: #0a0e1a;
-}
-.dialog-info { flex: 1; }
-.dialog-name {
-  font-size: 20px;
-  margin-bottom: 8px;
-  line-height: 1.4;
-}
-.dialog-name.planner { color: #a78bfa; text-shadow: 0 0 8px #7c3aed; }
-.dialog-name.writer  { color: #6ee7b7; text-shadow: 0 0 8px #10b981; }
-.dialog-desc {
-  font-family: 'Noto Sans KR', sans-serif;
-  font-size: 14px; color: #64748b;
-  line-height: 1.6;
-}
-
-.dialog-stats {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 10px; margin-bottom: 18px;
-}
-.stat-box {
-  background: #0a0e1a;
-  border: 1px solid #1e293b;
-  border-radius: 4px;
-  padding: 10px 8px;
-  text-align: center;
-}
-.stat-box .s-label {
-  font-size: 11px; color: #475569;
-  letter-spacing: 1px;
-  margin-bottom: 6px; display: block;
-}
-.stat-box .s-val {
-  font-size: 28px; color: #e2e8f0;
-  display: block;
-}
-
-.dialog-actions { display: flex; gap: 10px; }
-.action-btn {
-  flex: 1;
-  font-family: 'Black Han Sans', 'Noto Sans KR', sans-serif;
-  font-size: 15px;
-  padding: 14px 12px;
-  border: none; border-radius: 3px;
-  cursor: pointer;
-  transition: all .15s;
-  line-height: 1.6;
-}
-.action-btn:disabled { opacity: .4; cursor: not-allowed; }
-.btn-indigo {
-  background: #6366f1; color: #fff;
-  box-shadow: 0 0 12px rgba(99,102,241,.4);
-}
-.btn-indigo:hover:not(:disabled) {
-  background: #818cf8;
-  box-shadow: 0 0 20px rgba(99,102,241,.6);
-}
-.btn-green {
-  background: #059669; color: #fff;
-  box-shadow: 0 0 12px rgba(5,150,105,.4);
-}
-.btn-green:hover:not(:disabled) {
-  background: #10b981;
-  box-shadow: 0 0 20px rgba(5,150,105,.6);
-}
-.btn-ghost {
-  background: transparent; color: #475569;
-  border: 1px solid #1e293b; flex: 0 0 auto; padding: 12px 16px;
-}
-.btn-ghost:hover { color: #94a3b8; }
-
-.dialog-output {
-  display: none;
-  margin-top: 14px;
-  background: #0a0e1a;
-  border: 1px solid #1e293b;
-  border-radius: 3px;
-  padding: 12px;
-  font-family: 'Noto Sans KR', sans-serif;
-  font-size: 13px; color: #64748b;
-  max-height: 100px; overflow-y: auto;
-  white-space: pre-wrap;
-  line-height: 1.6;
-}
-.dialog-output.success { color: #6ee7b7; border-color: #10b981; }
-.dialog-output.error   { color: #fca5a5; border-color: #ef4444; }
-
-/* Spinner */
-.spin {
-  display: inline-block; width: 10px; height: 10px;
-  border: 2px solid rgba(255,255,255,.2);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: rot .5s linear infinite;
-  vertical-align: middle; margin-right: 6px;
-}
-@keyframes rot { to { transform: rotate(360deg); } }
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-</style>
-</head>
-<body>
-
-<header>
-  <span class="logo">a2aWriter</span>
-  <span style="color:#1e293b;font-size:14px;font-family:'Black Han Sans',sans-serif;">편집국</span>
-  <a href="/" class="back-btn">← 대시보드</a>
-</header>
-
-<canvas id="c" width="960" height="480"></canvas>
-<p class="hint">▲ 캐릭터를 클릭하면 대화할 수 있어요 ▲</p>
-
-<!-- Dialog -->
-<div class="dialog-overlay" id="overlay" onclick="closeDialog(event)">
-  <div class="dialog" id="dialog">
-    <div class="dialog-inner">
-      <div class="dialog-top">
-        <div class="dialog-portrait" id="d-portrait">🧠</div>
-        <div class="dialog-info">
-          <div class="dialog-name" id="d-name">기획 Agent</div>
-          <div class="dialog-desc" id="d-desc">대기 중</div>
-        </div>
-      </div>
-      <div class="dialog-stats" id="d-stats"></div>
-      <div class="dialog-actions" id="d-actions"></div>
-      <pre class="dialog-output" id="d-output"></pre>
-    </div>
-  </div>
-</div>
-
-<script>
-const canvas = document.getElementById('c');
-const ctx    = canvas.getContext('2d');
-ctx.imageSmoothingEnabled = false;
-
-const S = 4;               // 픽셀 스케일 (게임px → 화면px)
-const GW = canvas.width  / S;  // 240 게임px
-const GH = canvas.height / S;  // 120 게임px
-let   T  = 0;              // 글로벌 타이머 (ms)
-
-// ── 팔레트 ────────────────────────────────────────────
-const C = {
-  bg:    '#070b14', ceil:  '#0d1117', wall:  '#0f1823',
-  wallH: '#131d2b', floor: '#141c28', floorS:'#111825',
-  // 네온 악센트
-  neonP: '#818cf8', neonPd:'#3730a3', neonG: '#34d399', neonGd:'#065f46',
-  neonY: '#fbbf24', neonR: '#f43f5e',
-  // 가구
-  desk:  '#2a1f15', deskH: '#3d2d1e', deskT: '#1a1410',
-  shelf: '#1e1410', book1: '#ef4444', book2: '#3b82f6',
-  book3: '#22c55e', book4: '#f59e0b', book5: '#a855f7',
-  monitor:'#0f172a', monS: '#1e3a5f', monG: '#60a5fa',
-  paper: '#fffbeb', paperB:'#fef3c7',
-  lamp:  '#fbbf24', lampS: '#78350f',
-  plant: '#14532d', plantL:'#16a34a',
-  // 캐릭터 - 기획
-  pH:  '#4338ca', pB:  '#6366f1', pBL: '#818cf8',
-  pS:  '#fde68a', pSd: '#f59e0b', pG:  '#c7d2fe', pGd: '#4f46e5',
-  pT:  '#1e293b', pTL: '#334155', pE:  '#0f172a',
-  // 캐릭터 - 작가
-  wH:  '#7c2d12', wHL: '#9a3412',
-  wB:  '#047857', wBL: '#059669',
-  wS:  '#fde68a', wSd: '#f59e0b',
-  wT:  '#1e3a8a', wTL: '#1d4ed8', wE:  '#0f172a',
-  wPen:'#fbbf24',
-  _: null,
-};
-
-// ── 렌더러 ────────────────────────────────────────────
-function px(x, y, c) {
-  if (!c) return;
-  ctx.fillStyle = c;
-  ctx.fillRect(x * S, y * S, S, S);
-}
-function rect(x, y, w, h, c) {
-  ctx.fillStyle = c;
-  ctx.fillRect(x * S, y * S, w * S, h * S);
-}
-function glow(x, y, w, h, color, blur) {
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur  = blur;
-  ctx.fillStyle   = color;
-  ctx.globalAlpha = 0.18;
-  ctx.fillRect(x * S, y * S, w * S, h * S);
-  ctx.restore();
-}
-
-// ── 스프라이트 (10×14) ────────────────────────────────
-function plannerSprite(f, bob) {
-  const {pH:H,pB:B,pBL:BL,pS:Sk,pSd:Sd,pG:G,pGd:Gd,pT:T,pTL:TL,pE:E,_} = C;
-  const base = [
-    [_,_,H,H,H,H,H,_,_,_],
-    [_,H,Gd,H,H,H,Gd,H,_,_],
-    [_,_,Sk,Sk,Sk,Sk,Sk,_,_,_],
-    [_,_,G,Sk,G,Sk,G,_,_,_],
-    [_,_,Sk,Sd,Sk,Sd,Sk,_,_,_],
-    [_,BL,B,B,B,B,B,BL,_,_],
-    [_,_,B,B,B,B,B,_,_,_],
-    [_,_,B,B,B,B,B,_,_,_],
-  ];
-  const legs = f === 0 ? [
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,E,E,_,TL,T,_,_,_],
-    [_,_,_,_,_,E,E,_,_,_],
-  ] : [
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,TL,T,_,E,E,_,_,_],
-    [_,_,E,E,_,_,_,_,_,_],
-  ];
-  return [...base, ...legs];
-}
-
-function writerSprite(f) {
-  const {wH:H,wHL:HL,wB:B,wBL:BL,wS:Sk,wSd:Sd,wT:T,wTL:TL,wE:E,wPen:Y,_} = C;
-  const base = [
-    [_,_,H,H,H,H,H,_,_,_],
-    [_,H,HL,H,H,H,HL,H,_,_],
-    [_,_,Sk,Sk,Sk,Sk,Sk,_,_,_],
-    [_,_,Sk,E,Sk,E,Sk,_,_,_],
-    [_,_,Sk,Sd,Sk,Sd,Sk,_,_,_],
-    [_,BL,B,B,B,B,B,BL,Y,_],
-    [_,_,B,B,B,B,B,_,Y,_],
-    [_,_,B,B,B,B,B,_,_,_],
-  ];
-  const legs = f === 0 ? [
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,E,E,_,TL,T,_,_,_],
-    [_,_,_,_,_,E,E,_,_,_],
-  ] : [
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,T,TL,_,TL,T,_,_,_],
-    [_,_,TL,T,_,E,E,_,_,_],
-    [_,_,E,E,_,_,_,_,_,_],
-  ];
-  return [...base, ...legs];
-}
-
-function drawSprite(sprite, gx, gy, flipX) {
-  const cols = sprite[0].length;
-  sprite.forEach((row, ry) => {
-    row.forEach((c, rx) => {
-      if (!c) return;
-      px(flipX ? gx + (cols - 1 - rx) : gx + rx, gy + ry, c);
-    });
-  });
-}
-
-// ── 배경 ─────────────────────────────────────────────
-function drawBg(t) {
-  const flicker = 0.85 + Math.sin(t * 0.003) * 0.15;
-
-  // 천장
-  rect(0, 0, GW, 10, C.ceil);
-  rect(0, 10, GW, 1, '#0a0f1a');
-
-  // 벽
-  rect(0, 11, GW, GH - 11, C.wall);
-
-  // 바닥 타일
-  for (let x = 0; x < GW; x += 6) {
-    rect(x,     GH - 12, 6, 6,  x % 12 === 0 ? C.floor : C.floorS);
-    rect(x + 3, GH - 6,  6, 6,  x % 12 === 0 ? C.floorS : C.floor);
-  }
-  rect(0, GH - 12, GW, 1, '#1e2d40');
-
-  // ── 왼쪽 방 (기획) ──────────────────────────────────
-
-  // 네온 사인 - 기획실
-  ctx.save();
-  ctx.shadowColor = C.neonP;
-  ctx.shadowBlur  = 16;
-  ctx.fillStyle   = C.neonP;
-  ctx.font        = 'bold 14px "Black Han Sans"';
-  ctx.textAlign   = 'left';
-  ctx.globalAlpha = 0.7 + Math.sin(t * 0.002) * 0.2;
-  ctx.fillText('✦ 기획실', 8 * S, 8 * S);
-  ctx.restore();
-
-  // 창문
-  rect(8, 14, 22, 16, '#0f2035');
-  rect(9, 15, 10, 7,  '#1a3a5c');
-  rect(20, 15, 10, 7, '#1a3a5c');
-  rect(9, 23, 10, 6,  '#152d47');
-  rect(20, 23, 10, 6, '#152d47');
-  glow(9, 15, 20, 14, '#60a5fa', 20);
-  // 창문 테두리
-  rect(8, 14, 22, 1, '#1e3a5f');
-  rect(8, 30, 22, 1, '#1e3a5f');
-  rect(8, 14, 1, 16, '#1e3a5f');
-  rect(29, 14, 1, 16, '#1e3a5f');
-
-  // 화이트보드
-  rect(40, 13, 50, 30, '#1a2840');
-  rect(41, 14, 48, 28, '#0f1e30');
-  // 보드 내용 (선)
-  ctx.fillStyle = '#1e3a5f';
-  for (let i = 0; i < 5; i++) rect(43, 17 + i * 4, 22 + (i % 3) * 8, 1, '#253d5a');
-  ctx.save();
-  ctx.fillStyle = '#818cf8';
-  ctx.font = 'bold 8px "Black Han Sans"';
-  ctx.shadowColor = '#6366f1';
-  ctx.shadowBlur = 8;
-  ctx.fillText('기획안', 43 * S, 18 * S);
-  ctx.restore();
-
-  // 책상 (왼쪽)
-  rect(8, GH - 20, 72, 4, C.deskH);
-  rect(8, GH - 20, 72, 1, '#4a3728');
-  rect(9,  GH - 16, 3, 4, C.deskT);
-  rect(76, GH - 16, 3, 4, C.deskT);
-
-  // 책상 위 물건들
-  rect(11, GH - 24, 10, 4, C.paperB);  // 서류
-  rect(13, GH - 26, 8,  2, C.paper);
-  rect(24, GH - 23, 7,  3, '#c7d2fe'); // 포스트잇
-  rect(35, GH - 28, 2,  8, C.lampS);   // 조명 스탠드
-  rect(31, GH - 30, 10, 3, C.lamp);    // 조명 갓
-  glow(28, GH - 30, 16, 14, C.lamp, 24 * flicker);
-  rect(58, GH - 26, 9,  6, C.monitor); // 모니터
-  rect(59, GH - 25, 7,  4, C.monS);
-  rect(60, GH - 24, 5,  2, C.monG);
-  glow(59, GH - 25, 7, 4, C.neonP, 16);
-  rect(62, GH - 20, 2,  1, C.monitor); // 받침대
-
-  // 화분
-  rect(100, GH - 24, 7, 4, '#1a2535');
-  rect(101, GH - 30, 3, 6, C.plant);
-  rect(99,  GH - 34, 2, 5, C.plantL);
-  rect(103, GH - 36, 3, 7, C.plantL);
-  rect(100, GH - 38, 2, 4, C.plant);
-
-  // ── 중앙 벽 ──────────────────────────────────────
-  rect(118, 11, 4, GH - 11, C.ceil);
-  rect(118, GH - 24, 4, 12, '#0a0f1a'); // 문
-  rect(119, GH - 23, 2, 11, '#070b14');
-
-  // ── 오른쪽 방 (작가) ────────────────────────────────
-
-  // 네온 사인 - 작가실
-  ctx.save();
-  ctx.shadowColor = C.neonG;
-  ctx.shadowBlur  = 16;
-  ctx.fillStyle   = C.neonG;
-  ctx.font        = 'bold 14px "Black Han Sans"';
-  ctx.textAlign   = 'left';
-  ctx.globalAlpha = 0.7 + Math.cos(t * 0.002) * 0.2;
-  ctx.fillText('✦ 작가실', 130 * S, 8 * S);
-  ctx.restore();
-
-  // 책장
-  rect(130, 13, 26, 70, C.shelf);
-  const books = [C.book1,C.book2,C.book3,C.book4,C.book5,C.book1,C.book3,C.book2];
-  let bx = 131;
-  books.forEach((bc, i) => {
-    const bw = 2 + (i % 3);
-    rect(bx, 14, bw, 14, bc);
-    rect(bx, 28, bw, 10, books[(i + 3) % 8]);
-    rect(bx, 38, bw, 12, books[(i + 5) % 8]);
-    rect(bx, 50, bw, 10, books[(i + 1) % 8]);
-    rect(bx, 60, bw, 8,  books[(i + 4) % 8]);
-    bx += bw + 1;
-  });
-  // 책장 선반
-  for (let y = 28; y <= 70; y += 10) rect(130, y, 26, 1, C.desk);
-
-  // 책상 (오른쪽)
-  rect(160, GH - 20, 70, 4, C.deskH);
-  rect(160, GH - 20, 70, 1, '#4a3728');
-  rect(161, GH - 16, 3, 4, C.deskT);
-  rect(226, GH - 16, 3, 4, C.deskT);
-
-  // 책상 위 물건들
-  rect(162, GH - 24, 12, 4, C.paper);   // 원고
-  rect(164, GH - 26, 10, 2, C.paperB);
-  rect(176, GH - 24, 6,  3, '#fca5a5'); // 빨간 원고
-  rect(185, GH - 23, 2,  3, C.wPen);    // 펜
-  // 모니터 (큰)
-  rect(195, GH - 33, 16, 12, C.monitor);
-  rect(196, GH - 32, 14, 10, C.monS);
-  rect(197, GH - 31, 12,  8, C.monG);
-  glow(196, GH - 32, 14, 10, C.neonG, 18);
-  ctx.save();
-  ctx.fillStyle = '#34d399';
-  ctx.font = 'bold 8px "Black Han Sans"';
-  ctx.shadowColor = '#34d399'; ctx.shadowBlur = 8;
-  ctx.fillText('작성중', 197 * S, (GH - 26) * S);
-  ctx.restore();
-  rect(202, GH - 21, 4, 1, C.monitor); // 받침대
-
-  // 커피잔
-  rect(213, GH - 24, 5, 3, '#374151');
-  rect(214, GH - 26, 3, 2, '#7c3aed');
-  // 커피 연기 (애니메이션)
-  const smoke = Math.sin(t * 0.004) * 1;
-  ctx.fillStyle = 'rgba(167,139,250,0.3)';
-  ctx.fillRect((215 + smoke * 0.5) * S, (GH - 29) * S, S, S);
-  ctx.fillRect((215) * S, (GH - 31) * S, S, S);
-
-  // 상태바 (하단)
-  rect(0, GH - 6, GW, 6, '#0a0f1a');
-  rect(0, GH - 6, GW, 1, '#111825');
-
-  ctx.save();
-  ctx.font = 'bold 9px "Black Han Sans"';
-  ctx.textAlign = 'left';
-  const st = status;
-  const items = [
-    { label: '대기', val: st.planned,     color: C.neonP },
-    { label: '발행', val: st.published,   color: C.neonG },
-    { label: '작성중', val: st.writing,   color: C.neonY },
-    { label: '제안', val: st.suggestions, color: C.neonR },
-  ];
-  items.forEach((it, i) => {
-    ctx.fillStyle = it.color;
-    ctx.shadowColor = it.color; ctx.shadowBlur = 8;
-    ctx.fillText(`${it.label} ${it.val}`, (4 + i * 58) * S, (GH - 1) * S);
-  });
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#334155';
-  ctx.shadowBlur = 0;
-  ctx.fillText(new Date().toLocaleTimeString('ko-KR'), (GW - 2) * S, (GH - 1) * S);
-  ctx.restore();
-}
-
-// ── 이름 뱃지 ──────────────────────────────────────
-function drawBadge(gx, gy, name, color) {
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur  = 14;
-  ctx.fillStyle   = color;
-  ctx.font        = 'bold 11px "Black Han Sans"';
-  ctx.textAlign   = 'center';
-  ctx.fillText(name, (gx + 5) * S, (gy - 3) * S);
-  ctx.restore();
-}
-
-// ── 에이전트 상태 ─────────────────────────────────
-const agents = [
-  {
-    id: 'planner', name: '기획자', color: C.neonP,
-    x: 42, y: GH - 26, vx: 0.25, frame: 0, ftimer: 0,
-    patrol: [12, 106], facingL: false, bob: 0,
-  },
-  {
-    id: 'writer', name: '작가', color: C.neonG,
-    x: 195, y: GH - 26, vx: -0.3, frame: 0, ftimer: 0,
-    patrol: [125, 228], facingL: true, bob: 0,
-  },
-];
-
-let status = { planned: 0, published: 0, writing: 0, failed: 0, suggestions: 0 };
-async function fetchStatus() {
-  try { status = await (await fetch('/api/status')).json(); } catch(e) {}
-}
-fetchStatus();
-setInterval(fetchStatus, 8000);
-
-// ── 게임 루프 ──────────────────────────────────────
-let last = 0;
-function loop(ts) {
-  const dt = Math.min(ts - last, 50); last = ts;
-  T += dt;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBg(T);
-
-  agents.forEach(a => {
-    a.x += a.vx * (dt / 16);
-    if (a.x <= a.patrol[0])      { a.x = a.patrol[0]; a.vx =  Math.abs(a.vx); }
-    if (a.x >= a.patrol[1] - 10) { a.x = a.patrol[1] - 10; a.vx = -Math.abs(a.vx); }
-    a.facingL = a.vx < 0;
-    a.bob = Math.sin(T * 0.006 + (a.id === 'writer' ? 1.5 : 0)) * 0.8;
-    a.ftimer += dt;
-    if (a.ftimer > 200) { a.ftimer = 0; a.frame ^= 1; }
-
-    // 캐릭터 그로우
-    ctx.save();
-    ctx.shadowColor = a.color;
-    ctx.shadowBlur  = 12;
-    const sprite = a.id === 'planner'
-      ? plannerSprite(a.frame)
-      : writerSprite(a.frame);
-    drawSprite(sprite, Math.round(a.x), Math.round(a.y - 14 + a.bob), a.facingL);
-    ctx.restore();
-
-    drawBadge(Math.round(a.x), Math.round(a.y - 14 + a.bob), a.name, a.color);
-  });
-
-  requestAnimationFrame(loop);
-}
-
-// 폰트 로드 후 시작
-document.fonts.ready.then(() => requestAnimationFrame(loop));
-
-// ── 클릭 감지 ─────────────────────────────────────
-canvas.addEventListener('click', e => {
-  const r = canvas.getBoundingClientRect();
-  const cx = (e.clientX - r.left) / (r.width  / canvas.width)  / S;
-  const cy = (e.clientY - r.top)  / (r.height / canvas.height) / S;
-
-  for (const a of agents) {
-    const ax = Math.round(a.x), ay = Math.round(a.y - 14 + a.bob);
-    if (cx >= ax - 2 && cx <= ax + 12 && cy >= ay - 2 && cy <= ay + 18) {
-      openDialog(a); return;
-    }
-  }
-});
-
-// ── 다이얼로그 ────────────────────────────────────
-function openDialog(agent) {
-  const dlg = document.getElementById('dialog');
-  dlg.className = 'dialog ' + (agent.id === 'planner' ? 'planner-dialog' : 'writer-dialog');
-
-  document.getElementById('d-portrait').textContent = agent.id === 'planner' ? '🧠' : '✍️';
-  document.getElementById('d-output').style.display = 'none';
-  document.getElementById('d-output').textContent = '';
-  document.getElementById('d-output').className = 'dialog-output';
-
-  if (agent.id === 'planner') {
-    document.getElementById('d-name').className  = 'dialog-name planner';
-    document.getElementById('d-name').textContent = '🧠 기획 에이전트';
-    document.getElementById('d-desc').textContent = `대기 중 · AI 제안 ${status.suggestions}개 준비됨`;
-    document.getElementById('d-stats').innerHTML = `
-      <div class="stat-box"><span class="s-label">대기 소재</span><span class="s-val" style="color:#a78bfa">${status.planned}</span></div>
-      <div class="stat-box"><span class="s-label">발행 완료</span><span class="s-val" style="color:#34d399">${status.published}</span></div>
-      <div class="stat-box"><span class="s-label">AI 제안</span><span class="s-val" style="color:#f43f5e">${status.suggestions}</span></div>
-      <div class="stat-box"><span class="s-label">실패</span><span class="s-val" style="color:#fb923c">${status.failed}</span></div>
-    `;
-    document.getElementById('d-actions').innerHTML = `
-      <button class="action-btn btn-indigo" onclick="runAction('suggest')">✨ 새 주제 기획하기 (5개)</button>
-      <button class="action-btn btn-ghost"  onclick="closeDialog()">닫기</button>
-    `;
-  } else {
-    document.getElementById('d-name').className  = 'dialog-name writer';
-    document.getElementById('d-name').textContent = '✍️ 작가 에이전트';
-    document.getElementById('d-desc').textContent = `대기 중 · 발행 완료 ${status.published}개`;
-    document.getElementById('d-stats').innerHTML = `
-      <div class="stat-box"><span class="s-label">대기 소재</span><span class="s-val" style="color:#a78bfa">${status.planned}</span></div>
-      <div class="stat-box"><span class="s-label">발행 완료</span><span class="s-val" style="color:#34d399">${status.published}</span></div>
-      <div class="stat-box"><span class="s-label">작성 중</span><span class="s-val" style="color:#fbbf24">${status.writing}</span></div>
-      <div class="stat-box"><span class="s-label">실패</span><span class="s-val" style="color:#fb923c">${status.failed}</span></div>
-    `;
-    document.getElementById('d-actions').innerHTML = `
-      <button class="action-btn btn-green" onclick="runAction('write_publish')">📝 지금 글 쓰고 발행하기</button>
-      <button class="action-btn btn-ghost" onclick="closeDialog()">닫기</button>
-    `;
-  }
-  document.getElementById('overlay').classList.add('open');
-}
-
-function closeDialog(e) {
-  if (e && e.target !== document.getElementById('overlay')) return;
-  document.getElementById('overlay').classList.remove('open');
-}
-
-async function runAction(type) {
-  const btns = document.querySelectorAll('.action-btn');
-  btns.forEach(b => b.disabled = true);
-  const out = document.getElementById('d-output');
-  out.style.display = 'block';
-  out.className = 'dialog-output';
-  out.textContent = '실행 중...\n';
-
-  try {
-    if (type === 'suggest') {
-      const d = await (await fetch('/api/suggest', { method: 'POST' })).json();
-      out.className = 'dialog-output ' + (d.ok ? 'success' : 'error');
-      out.textContent = d.ok
-        ? '✅ 기획 완료! 대시보드 [편집장 승인] 탭에서 확인하세요.'
-        : '❌ ' + (d.error || '알 수 없는 오류');
-    } else if (type === 'write_publish') {
-      out.textContent = '📝 Writer 실행 중...\n';
-      const d1 = await (await fetch('/api/run_writer',    { method: 'POST' })).json();
-      out.textContent += d1.output || d1.error || '';
-      if (d1.ok) {
-        out.textContent += '\n🚀 Publisher 실행 중...\n';
-        const d2 = await (await fetch('/api/run_publisher', { method: 'POST' })).json();
-        out.textContent += d2.output || d2.error || '';
-        out.className = 'dialog-output ' + (d2.ok ? 'success' : 'error');
-      } else {
-        out.className = 'dialog-output error';
-      }
-    }
-  } catch(e) {
-    out.textContent += '오류: ' + e.message;
-    out.className = 'dialog-output error';
-  } finally {
-    btns.forEach(b => b.disabled = false);
-    await fetchStatus();
-  }
-}
-</script>
-</body>
-</html>"""
-
-
-@app.route("/desk")
-def desk():
-    return render_template_string(DESK_TEMPLATE)
 
 
 if __name__ == "__main__":
