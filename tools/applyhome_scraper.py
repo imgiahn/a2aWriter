@@ -14,7 +14,7 @@ from typing import List, Dict, Optional
 from playwright.sync_api import sync_playwright, Page, BrowserContext
 
 LIST_URL = "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancListView.do"
-TARGET_REGIONS = {"서울", "경기", "인천"}
+TARGET_REGIONS = ["서울", "경기", "인천"]
 
 
 def _make_browser(pw):
@@ -26,8 +26,8 @@ def _make_browser(pw):
     return browser, context, page
 
 
-def _parse_rows(page: Page) -> list:
-    """현재 페이지 테이블에서 공고 목록을 파싱한다."""
+def _parse_rows(page: Page, region: str) -> list:
+    """현재 페이지 테이블에서 공고 목록을 파싱한다 (이미 지역 필터링된 페이지)."""
     from datetime import date as _date
     import re as _re
     today = _date.today()
@@ -36,7 +36,6 @@ def _parse_rows(page: Page) -> list:
     items = []
     for row in rows:
         pbno  = row.get_attribute("data-pbno") or ""
-        hmno  = row.get_attribute("data-hmno") or ""
         honm  = row.get_attribute("data-honm") or ""
         if not pbno:
             continue
@@ -44,16 +43,11 @@ def _parse_rows(page: Page) -> list:
         if len(cells) < 9:
             continue
 
-        region      = cells[0].inner_text().strip()
         house_secd  = cells[1].inner_text().strip()   # 민영 / 국민
         rent_secd   = cells[2].inner_text().strip()   # 분양주택 / 임대주택
         notice_date = cells[6].inner_text().strip()
         apply_range = cells[7].inner_text().strip()   # "2026-06-15 ~ 2026-06-17"
         result_date = cells[8].inner_text().strip()
-
-        # 서울/경기/인천만
-        if region not in TARGET_REGIONS:
-            continue
 
         # 마감일 지난 공고 스킵
         if apply_range:
@@ -70,10 +64,7 @@ def _parse_rows(page: Page) -> list:
         housing_source = "임대" if "임대" in rent_secd else "분양"
         priority       = "high" if housing_source == "분양" else "medium"
 
-        # 청약 마감: apply_range에서 ~ 뒤 날짜
-        deadline = ""
-        if "~" in apply_range:
-            deadline = apply_range.split("~")[-1].strip()
+        deadline = apply_range.split("~")[-1].strip() if "~" in apply_range else apply_range
 
         items.append({
             "notice_id":      pbno,
@@ -92,36 +83,39 @@ def _parse_rows(page: Page) -> list:
     return items
 
 
-def scrape_notices(max_pages: int = 10) -> list:
-    """서울/경기/인천 공고 목록을 수집한다."""
+def scrape_notices(max_pages: int = 5) -> list:
+    """서울/경기/인천 공고 목록을 수집한다 (지역별 URL 파라미터 필터링)."""
     results = []
+    seen_ids = set()
 
     with sync_playwright() as pw:
         browser, context, page = _make_browser(pw)
         try:
-            page.goto(LIST_URL, timeout=30000)
-            page.wait_for_load_state("networkidle", timeout=20000)
-            page.wait_for_timeout(2000)
+            for region in TARGET_REGIONS:
+                region_url = f"{LIST_URL}?suplyAreaCode={region}"
+                page.goto(region_url, timeout=30000)
+                page.wait_for_load_state("networkidle", timeout=20000)
+                page.wait_for_timeout(1500)
 
-            for page_num in range(1, max_pages + 1):
-                if page_num > 1:
-                    # 페이지 이동
-                    nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
-                    if not nav:
+                for page_num in range(1, max_pages + 1):
+                    if page_num > 1:
+                        nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
+                        if not nav:
+                            break
+                        nav.click()
+                        page.wait_for_load_state("networkidle", timeout=15000)
+                        page.wait_for_timeout(1000)
+
+                    rows_found = _parse_rows(page, region)
+                    # 중복 제거 (다른 지역 요청 간)
+                    new_rows = [r for r in rows_found if r["notice_id"] not in seen_ids]
+                    seen_ids.update(r["notice_id"] for r in new_rows)
+                    results.extend(new_rows)
+                    print(f"  [청약홈/{region}] {page_num}p: {len(new_rows)}건", file=sys.stderr)
+
+                    next_btn = page.query_selector(f"a[href='?pageIndex={page_num + 1}']")
+                    if not next_btn:
                         break
-                    nav.click()
-                    page.wait_for_load_state("networkidle", timeout=15000)
-                    page.wait_for_timeout(1500)
-
-                rows_found = _parse_rows(page)
-                results.extend(rows_found)
-                print(f"  [청약홈] {page_num}페이지: {len(rows_found)}건 (서울/경기/인천)", file=sys.stderr)
-
-                # 다음 페이지 없으면 종료
-                next_btn = page.query_selector(f"a[href='?pageIndex={page_num + 1}']")
-                if not next_btn:
-                    break
-
         finally:
             browser.close()
 
