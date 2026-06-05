@@ -145,8 +145,8 @@ def scrape_notices(max_pages: int = 5) -> list:
                             nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
                             if not nav:
                                 break
-                            with page.expect_navigation(timeout=20000):
-                                page.evaluate("el => el.click()", nav)
+                            page.evaluate("el => el.click()", nav)
+                            page.wait_for_timeout(2000)
                             try:
                                 page.wait_for_selector("table tbody tr", timeout=8000)
                             except Exception:
