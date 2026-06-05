@@ -145,12 +145,17 @@ def scrape_notices(max_pages: int = 5) -> list:
                             nav = page.query_selector(f"a[href='?pageIndex={page_num}']")
                             if not nav:
                                 break
-                            # 로딩 오버레이 무시하고 JS 클릭
-                            page.evaluate("el => el.click()", nav)
-                            page.wait_for_load_state("domcontentloaded", timeout=20000)
-                            page.wait_for_timeout(1500)
+                            with page.expect_navigation(timeout=20000):
+                                page.evaluate("el => el.click()", nav)
+                            try:
+                                page.wait_for_selector("table tbody tr", timeout=8000)
+                            except Exception:
+                                pass
 
-                        rows_found = _parse_rows(page, region, apt_only=apt_only)
+                        try:
+                            rows_found = _parse_rows(page, region, apt_only=apt_only)
+                        except Exception:
+                            rows_found = []
                         new_rows   = [r for r in rows_found if r["notice_id"] not in seen_ids]
                         seen_ids.update(r["notice_id"] for r in new_rows)
                         results.extend(new_rows)
