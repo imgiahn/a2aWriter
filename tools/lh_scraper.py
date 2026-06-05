@@ -132,16 +132,9 @@ def _get_pdf_file_ids(page: Page) -> List[str]:
     return ids
 
 
-def _download_pdf_text(page: Page, file_id: str) -> str:
-    """playwright로 PDF를 다운로드해 텍스트를 반환한다."""
+def _download_pdf_bytes(page: Page, file_id: str) -> bytes:
+    """playwright로 PDF를 다운로드해 bytes를 반환한다."""
     import os, tempfile
-    try:
-        from tools.pdf_parser import extract_price_focused
-    except ImportError:
-        import sys as _sys, os as _os
-        _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-        from tools.pdf_parser import extract_price_focused
-
     try:
         with page.expect_download(timeout=20000) as dl_info:
             page.evaluate(f"fileDownLoad('{file_id}')")
@@ -151,10 +144,25 @@ def _download_pdf_text(page: Page, file_id: str) -> str:
         with open(tmp_path, "rb") as f:
             data = f.read()
         os.unlink(tmp_path)
-        return extract_price_focused(data)
+        return data
     except Exception as e:
         print(f"  ⚠️  PDF 다운로드 실패 (fileId={file_id}): {e}", file=sys.stderr)
-        return ""
+        return b""
+
+
+def _download_pdf_text(page: Page, file_id: str) -> tuple:
+    """playwright로 PDF를 다운로드해 (price_text, bytes)를 반환한다."""
+    try:
+        from tools.pdf_parser import extract_price_focused
+    except ImportError:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+        from tools.pdf_parser import extract_price_focused
+
+    data = _download_pdf_bytes(page, file_id)
+    if not data:
+        return "", b""
+    return extract_price_focused(data), data
 
 
 def fetch_detail_by_notice_id(notice_id: str, mi: str = "1026") -> str:
@@ -185,7 +193,8 @@ def fetch_detail_with_pdf(notice_id: str, mi: str = "1026") -> dict:
                 return {"text": "", "pdf_text": "", "pdf_filename": ""}
 
             link.click()
-            page.wait_for_timeout(3000)
+            page.wait_for_load_state("networkidle", timeout=20000)
+            page.wait_for_timeout(2000)
 
             text = _extract_page_text(page)
 
@@ -194,10 +203,11 @@ def fetch_detail_with_pdf(notice_id: str, mi: str = "1026") -> dict:
             pdf_text     = ""
             pdf_filename = ""
 
+            pdf_bytes = b""
             if pdf_file_ids:
                 print(f"  📎 PDF {len(pdf_file_ids)}건 발견, 다운로드 중...", file=sys.stderr)
                 # 공고문 PDF 우선 (첫 번째)
-                pdf_text = _download_pdf_text(page, pdf_file_ids[0])
+                pdf_text, pdf_bytes = _download_pdf_text(page, pdf_file_ids[0])
 
                 # 파일명 추출
                 for a in page.query_selector_all("a[href*='fileDownLoad']"):
@@ -206,7 +216,7 @@ def fetch_detail_with_pdf(notice_id: str, mi: str = "1026") -> dict:
                         pdf_filename = name
                         break
 
-            return {"text": text, "pdf_text": pdf_text, "pdf_filename": pdf_filename}
+            return {"text": text, "pdf_text": pdf_text, "pdf_filename": pdf_filename, "pdf_bytes": pdf_bytes}
         finally:
             browser.close()
 

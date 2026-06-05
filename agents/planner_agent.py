@@ -260,13 +260,16 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
 공급유형: {supply_type}
 
 공고 텍스트:
-{detail_text[:4000]}
+{detail_text[:14000]}
 
 {{
   "total_units": "총 공급세대수 (예: 50세대)",
-  "apply_start": "신청 시작일 YYYY.MM.DD",
-  "apply_end": "신청 마감일 YYYY.MM.DD",
+  "notice_phase": "공고 단계 — '사전청약' 또는 '본청약' 중 하나",
+  "apply_start": "청약 접수 시작일 YYYY.MM.DD — 사전청약이면 사전청약 접수 시작, 본청약이면 본청약 신규 접수 시작",
+  "apply_end": "청약 접수 마감일 YYYY.MM.DD — notice_phase에 해당하는 접수 마감일. apply_start와 1~2일 차이. 주의: 선호순위 선택/배정결과 발표/신청포기/서류접수 마감일과 혼동 금지",
   "result_date": "당첨자 발표일 YYYY.MM.DD",
+  "contract_start": "계약 시작일 YYYY.MM.DD",
+  "contract_end": "계약 종료일 YYYY.MM.DD",
   "move_in": "입주 예정일",
   "supply_target": "공급 대상 (예: 무주택세대구성원)",
   "qualifications": "신청 자격 핵심 요약 (3줄 이내)",
@@ -280,7 +283,14 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
   "balance_payment": "잔금 (예: 분양가의 30%, 입주 시)",
   "first_supply": "우선공급 조건 요약",
   "conversion": "분양전환 여부 (예: 10년 후 분양전환 가능, 해당없음)",
-  "location_detail": "단지 위치 상세 주소"
+  "location_detail": "단지 위치 상세 주소",
+  "project_name": "단지명 또는 브랜드명 (예: e편한세상 분당 퍼스트빌리지, 없으면 빈 문자열)",
+  "supply_type_detail": "공급유형 (예: 공공분양(신혼희망타운), 국민임대, 행복주택 등)",
+  "supply_this_time": "이번 공급 세대수 (예: 473세대, 예비입주자 포함 시 별도 표기)",
+  "supply_units": "타입별 공급세대수 (예: 51㎡ 274세대, 55㎡ 482세대, 59㎡ 177세대 / 없으면 빈 문자열)",
+  "restriction_rewin": "재당첨 제한 기간 (예: 10년, 없음)",
+  "restriction_resale": "전매 제한 기간 (예: 소유권이전등기일로부터 3년, 없음)",
+  "obligation_residence": "거주 의무 기간 (예: 3년, 없음)"
 }}"""
 
     try:
@@ -300,9 +310,41 @@ def extract_notice_fields(detail_text: str, supply_type: str) -> dict:
     return {}
 
 
+def _save_pdf_to_disk(notice_id: str, pdf_bytes: bytes) -> Optional[str]:
+    """PDF bytes를 data/llmenginehistory/notices/{notice_id}/original.pdf 로 저장한다."""
+    if not pdf_bytes or not notice_id:
+        return None
+    folder = Path(f"data/llmenginehistory/notices/{notice_id}")
+    folder.mkdir(parents=True, exist_ok=True)
+    pdf_path = folder / "original.pdf"
+    if not pdf_path.exists():
+        pdf_path.write_bytes(pdf_bytes)
+    return str(pdf_path)
+
+
+def extract_qualification_tables(pdf_bytes: bytes) -> str:
+    """PDF에서 소득 기준 표를 직접 추출해 HTML로 반환한다 (GPT 미사용)."""
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.pdf_parser import extract_qual_tables_as_html
+
+    return extract_qual_tables_as_html(pdf_bytes)
+
+
+def extract_scoring_text(pdf_bytes: bytes) -> str:
+    """PDF에서 소득 배점 기준 페이지 텍스트를 추출한다."""
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.pdf_parser import extract_scoring_focused
+
+    return extract_scoring_focused(pdf_bytes)
+
+
 def _write_task_file(folder: Path, task_id: str, item: dict, fields: dict,
                      category: str, housing_source: str, task_priority: str,
-                     pdf_text: str = ""):
+                     pdf_text: str = "", qual_fields: dict = None,
+                     qual_tables_html: str = "", pdf_path: str = "",
+                     scoring_text: str = ""):
     """Task 파일을 생성한다. planner 운영/개발 모드 공통 사용."""
     folder.mkdir(parents=True, exist_ok=True)
     notice_id   = item.get("notice_id", "")
@@ -311,8 +353,10 @@ def _write_task_file(folder: Path, task_id: str, item: dict, fields: dict,
     region      = item.get("region", "")
     notice_date = item.get("notice_date", "")
     detail_url  = item.get("detail_url", "")
-    has_pdf_flag = "true" if pdf_text else "false"
-    pdf_section  = ("## PDF 원문\n\n```\n" + pdf_text[:6000] + "\n```") if pdf_text else ""
+    has_pdf_flag  = "true" if pdf_text else "false"
+    pdf_section   = ("## PDF 원문\n\n```\n" + pdf_text[:6000] + "\n```") if pdf_text else ""
+    qual_section    = (f"## 소득자산기준\n\n{qual_tables_html}") if qual_tables_html else ""
+    scoring_section = (f"## 배점기준\n\n```\n{scoring_text}\n```") if scoring_text else ""
 
     content = f"""---
 task_id: {task_id}
@@ -333,15 +377,19 @@ notice_date: {notice_date}
 deadline: {item.get('deadline', '')}
 detail_url: {detail_url}
 total_units: {fields.get('total_units', '')}
+notice_phase: {fields.get('notice_phase', '')}
 apply_start: {fields.get('apply_start', '')}
 apply_end: {fields.get('apply_end', '')}
 result_date: {fields.get('result_date', '')}
+contract_start: {fields.get('contract_start', '')}
+contract_end: {fields.get('contract_end', '')}
 move_in: {fields.get('move_in', '')}
 supply_target: {fields.get('supply_target', '')}
 deposit: {fields.get('deposit', '')}
 monthly_rent: {fields.get('monthly_rent', '')}
 jeonse_amount: {fields.get('jeonse_amount', '')}
 house_types: {fields.get('house_types', '')}
+supply_units: {fields.get('supply_units', '')}
 sale_price: {fields.get('sale_price', '')}
 contract_amount: {fields.get('contract_amount', '')}
 interim_payment: {fields.get('interim_payment', '')}
@@ -349,12 +397,23 @@ balance_payment: {fields.get('balance_payment', '')}
 first_supply: {fields.get('first_supply', '')}
 conversion: {fields.get('conversion', '')}
 location_detail: {fields.get('location_detail', '')}
+supply_this_time: {fields.get('supply_this_time', '')}
+restriction_rewin: {fields.get('restriction_rewin', '')}
+restriction_resale: {fields.get('restriction_resale', '')}
+obligation_residence: {fields.get('obligation_residence', '')}
+income_limit: {(qual_fields or {}).get('income_limit', '')}
+asset_limit: {(qual_fields or {}).get('asset_limit', '')}
 qualifications: |
   {fields.get('qualifications', '').replace(chr(10), chr(10) + '  ')}
 created_by: planner_agent
 created_at: {date.today().isoformat()}
 has_pdf: {has_pdf_flag}
+pdf_path: {pdf_path}
 ---
+{qual_section}
+
+{scoring_section}
+
 {pdf_section}
 """
     (folder / f"{task_id}.md").write_text(content, encoding="utf-8")
@@ -418,18 +477,29 @@ def cheongyak_run(paths: dict):
         detail      = fetch_detail_with_pdf(notice_id, mi)
         detail_text = detail["text"]
         pdf_text    = detail.get("pdf_text", "")
+        pdf_bytes   = detail.get("pdf_bytes", b"")
         if pdf_text:
             print(f"    📄 PDF {detail.get('pdf_filename','')[:30]} ({len(pdf_text)}자)")
         combined    = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
-        fields      = extract_notice_fields(combined, supply_type)
-        category    = get_housing_category(supply_type)
+        fields           = extract_notice_fields(combined, supply_type)
+        qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
+        scoring_text     = extract_scoring_text(pdf_bytes) if pdf_bytes else ""
+        pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes) or ""
+        if qual_tables_html:
+            print(f"    📊 소득기준 표 추출 완료")
+        if scoring_text:
+            print(f"    🎯 배점기준 추출 완료")
+        if pdf_disk_path:
+            print(f"    💾 PDF 저장: {pdf_disk_path}")
+        category = get_housing_category(supply_type)
 
         _write_task_file(
             folder=paths["planned"],
             task_id=get_next_task_id(paths["planned"]),
             item=item, fields=fields, category=category,
             housing_source=housing_source, task_priority=task_priority,
-            pdf_text=pdf_text,
+            pdf_text=pdf_text, qual_tables_html=qual_tables_html,
+            pdf_path=pdf_disk_path, scoring_text=scoring_text,
         )
         print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
         created += 1
@@ -459,8 +529,9 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
 
     print(f"  상세 수집 중...")
     detail = fetch_detail_with_pdf(notice_id, mi)
-    detail_text = detail["text"]
-    pdf_text    = detail.get("pdf_text", "")
+    detail_text  = detail["text"]
+    pdf_text     = detail.get("pdf_text", "")
+    pdf_bytes    = detail.get("pdf_bytes", b"")
     pdf_filename = detail.get("pdf_filename", "")
 
     if not detail_text:
@@ -470,8 +541,6 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
     print(f"  상세 텍스트: {len(detail_text)}자")
     if pdf_text:
         print(f"  PDF 추출 완료: {pdf_filename} ({len(pdf_text)}자)")
-    else:
-        print(f"  PDF: 없음 또는 추출 실패")
 
     # 기본 정보 추정 (텍스트에서)
     housing_source = "분양" if mi == "1027" else "임대"
@@ -485,15 +554,30 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
         if supply_type:
             break
 
-    combined = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
-    fields   = extract_notice_fields(combined, supply_type)
+    combined         = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
+    fields           = extract_notice_fields(combined, supply_type)
+    qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
+    scoring_text     = extract_scoring_text(pdf_bytes) if pdf_bytes else ""
+    pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes) or ""
+    if qual_tables_html:
+        print(f"  📊 소득기준 표 추출 완료")
+    if scoring_text:
+        print(f"  🎯 배점기준 추출 완료")
+    if pdf_disk_path:
+        print(f"  💾 PDF 저장: {pdf_disk_path}")
+    # GPT 추출 결과로 supply_type 보완
+    if not supply_type and fields.get("supply_type_detail"):
+        supply_type = fields["supply_type_detail"]
     category = get_housing_category(supply_type)
     priority = "high" if mi == "1027" else "medium"
+
+    # 단지명: GPT 추출 project_name 우선, 없으면 location_detail
+    notice_name = (fields.get("project_name") or fields.get("location_detail") or notice_id)
 
     task_id = f"test_{notice_id}"
     item = {
         "notice_id":      notice_id,
-        "notice_name":    fields.get("location_detail", notice_id),
+        "notice_name":    notice_name,
         "supply_type":    supply_type,
         "region":         "",
         "notice_date":    "",
@@ -507,7 +591,8 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
         folder=test_folder, task_id=task_id, item=item,
         fields=fields, category=category,
         housing_source=housing_source, task_priority=priority,
-        pdf_text=pdf_text,
+        pdf_text=pdf_text, qual_tables_html=qual_tables_html,
+        pdf_path=pdf_disk_path, scoring_text=scoring_text,
     )
 
     out_path = test_folder / f"{task_id}.md"
