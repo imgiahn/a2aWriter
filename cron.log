@@ -769,3 +769,39 @@ Task: 20260531_039
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main a18a1eb] auto: 2026-06-05 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 4 files changed, 87 insertions(+)
+ create mode 100644 articles/mbtireallove/published/20260531_039.html
+ create mode 100644 articles/mbtireallove/summary/20260531_039.txt
+ rename blogs/mbtireallove/tasks/{planned => published}/20260531_039.md (100%)
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260605_002 — 화성동탄2 C-27블록 공공분양주택 입주자모집공고 공고 해설
+  글 생성 중...
+  제목: 🏠 동탄2신도시 공공분양 84㎡, 분양가와 당첨 기회 체크
+  초안 저장: articles/llmenginehistory/draft/20260605_002.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260605_002
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260605_002
+제목: 🏠 동탄2신도시 공공분양 84㎡, 분양가와 당첨 기회 체크
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
