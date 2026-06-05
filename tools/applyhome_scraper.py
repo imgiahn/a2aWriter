@@ -217,16 +217,6 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
         pdf_url      = pdf_m.group(1)
         pdf_filename = f"applyhome_{notice_id}.pdf"
         print(f"  📎 PDF 발견, 다운로드 중...", file=sys.stderr)
-                try:
-                    import tempfile, os
-                    with context.expect_page(timeout=15000) as new_page_info:
-                        pdf_link.click(modifiers=["Alt"])  # Alt+Click → 다운로드 시도
-                    new_p = new_page_info.value
-                    new_p.close()
-                except Exception:
-                    pass
-
-                # expect_download 방식
         try:
             pdf_resp  = _req.get(pdf_url, headers=HEADERS, timeout=30)
             pdf_bytes = pdf_resp.content
