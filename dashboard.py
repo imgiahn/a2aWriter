@@ -133,9 +133,9 @@ def index():
     urgent = [t for t in planned if t["deadline_date"] and
               0 < (t["deadline_date"] - today).days <= 3]
 
-    # 대기 태스크에 미리보기 여부 추가
+    # 미리보기는 클릭 시 on-demand 생성 (항상 버튼 표시)
     for t in planned:
-        t["preview"] = has_preview(t["task_id"])
+        t["preview"] = True
 
     # 발행 완료 역순 정렬
     published_rev = list(reversed(published))
