@@ -588,10 +588,16 @@ def applyhome_run(paths: dict):
             pdf_text    = extract_price_focused(cached_pdf)
             print(f"    📄 PDF 캐시 사용 ({len(pdf_text)}자)")
         else:
-            detail      = ah_fetch(notice_id)
-            detail_text = detail["text"]
-            pdf_text    = detail.get("pdf_text", "")
-            pdf_bytes   = detail.get("pdf_bytes", b"")
+            try:
+                detail      = ah_fetch(notice_id)
+                detail_text = detail["text"]
+                pdf_text    = detail.get("pdf_text", "")
+                pdf_bytes   = detail.get("pdf_bytes", b"")
+            except Exception as e:
+                print(f"    ⚠️  상세 수집 실패, 목록 정보만 사용: {e}", file=sys.stderr)
+                detail_text = ""
+                pdf_text    = ""
+                pdf_bytes   = b""
         if pdf_text:
             print(f"    📄 PDF ({len(pdf_text)}자)")
 
