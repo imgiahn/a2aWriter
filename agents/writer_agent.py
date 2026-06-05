@@ -12,6 +12,7 @@ Writer Agent
 import os
 import re
 import sys
+import json
 import shutil
 import argparse
 from pathlib import Path
@@ -36,6 +37,7 @@ def get_paths(blog: str) -> dict:
     base = Path(f"blogs/{blog}")
     return {
         "tasks_planned":  base / "tasks/planned",
+        "tasks_enriched": base / "tasks/enriched",
         "tasks_writing":  base / "tasks/writing",
         "articles_draft": Path(f"articles/{blog}/draft"),
         "writing_guide":  base / "writing_guide.md",
@@ -54,6 +56,30 @@ def parse_task(task_file: Path) -> dict:
             k, v = line.split(": ", 1)
             parsed[k.strip()] = v.strip()
     parsed["_body"] = body
+
+    # 소득자산기준 HTML 섹션 추출
+    qual_m = re.search(r"## 소득자산기준\n\n(.*?)(?=\n## |\Z)", body, re.DOTALL)
+    parsed["_qual_tables_html"] = qual_m.group(1).strip() if qual_m else ""
+
+    # 배점기준 텍스트 섹션 추출
+    score_m = re.search(r"## 배점기준\n\n```\n(.*?)\n```", body, re.DOTALL)
+    parsed["_scoring_text"] = score_m.group(1).strip() if score_m else ""
+
+    # enriched JSON 섹션 파싱 (없으면 빈 값 — planned task도 정상 동작)
+    def _parse_json_section(name: str, default):
+        m = re.search(rf"## {name}\n+```json\n(.*?)\n```", body, re.DOTALL)
+        if not m:
+            return default
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            return default
+
+    parsed["_prices"]          = _parse_json_section("prices", {})
+    parsed["_schedule"]        = _parse_json_section("schedule", {})
+    parsed["_qualification"]   = _parse_json_section("qualification", {})
+    parsed["_decision_points"] = _parse_json_section("decision_points", [])
+
     return parsed
 
 
@@ -86,6 +112,99 @@ def _load_category_guide(blog: str, category: str) -> str:
     return common.read_text(encoding="utf-8") if common.exists() else ""
 
 
+TABLE_STYLE = "border-collapse:collapse; width:100%; text-align:center;"
+TH_STYLE    = "background:#f5f5f5; border:1px solid #ddd; padding:8px; text-align:center;"
+TD_STYLE    = "border:1px solid #ddd; padding:8px; text-align:center;"
+
+
+def _build_map_html(location: str) -> str:
+    """위치 지도 링크 버튼 HTML 생성 (네이버 지도 + 카카오 지도).
+
+    신규 택지는 지구/블록 주소가 지도에 없으므로 동 단위까지만 잘라서 사용.
+    """
+    if not location:
+        return ""
+    from urllib.parse import quote as _quote
+
+    # 동/읍/면 단위까지만 추출 (지구명·블록명 제거)
+    import re as _re
+    m = _re.search(r"(.+?(?:동|읍|면|리))\b", location)
+    query = m.group(1).strip() if m else location
+    enc = _quote(query)
+    naver = f"https://map.naver.com/v5/search/{enc}"
+    kakao = f"https://map.kakao.com/?q={enc}"
+    return (
+        f'<p style="margin:10px 0;">'
+        f'<a href="{naver}" target="_blank" rel="noopener" '
+        f'style="display:inline-block;padding:6px 14px;background:#03c75a;color:#fff;'
+        f'border-radius:4px;text-decoration:none;font-size:14px;margin-right:8px;">📍 네이버 지도</a>'
+        f'<a href="{kakao}" target="_blank" rel="noopener" '
+        f'style="display:inline-block;padding:6px 14px;background:#fee500;color:#3c1e1e;'
+        f'border-radius:4px;text-decoration:none;font-size:14px;">📍 카카오 지도</a>'
+        f'</p>'
+    )
+
+
+def _build_qual_html(income_limit: str, asset_limit: str,
+                     qual_tables_html: str = "", scoring_text: str = "") -> str:
+    """소득/자산 기준을 최소 조건 표 + 배점표 + 소득 금액 표로 재구성.
+
+    토큰 초과 방지를 위해 두 번 호출로 분리:
+    - 호출 1: 신청 최소 조건 + 우선공급/일반공급 배점표 (텍스트 위주)
+    - 호출 2: 소득별 배점 + 가구원수별 금액 표 (숫자 위주)
+    """
+    source = qual_tables_html or ((income_limit or "") + "\n" + (asset_limit or ""))
+    if not source.strip() and not scoring_text:
+        return ""
+
+    STYLE = f"table: {TABLE_STYLE} / th: {TH_STYLE} / td: {TD_STYLE}"
+
+    # ── 호출 1: 최소 조건 + 배점표 ──────────────────────────────
+    prompt1 = f"""아래 데이터를 HTML 표로 재정리하세요. HTML만 출력하세요.
+
+소득 기준 데이터 (금액 숫자에 콤마 천단위 구분 반드시 적용 예: 9,793,892):
+{source[:1500]}
+
+배점 기준 원문:
+{scoring_text[:2500]}
+
+출력 규칙:
+
+[표 1] <h3>신청 소득 최소 조건</h3> + <table>
+- 칼럼: 구분 | 3인 이하 | 4인 | 5인 | 6인 | 7인
+- 행: 가장 완화된 소득 상한 기준 (단독소득 / 맞벌이 구분)
+- 구분 열: "단독소득 (130% 이하)" / "맞벌이 (140% 이하)"
+- 나머지 셀: 금액 숫자만, 설명 텍스트 혼합 금지
+
+[표 2] <h3>우선공급 배점표 (총 9점)</h3> + <table> (우선공급 배점 데이터 있는 경우에만)
+- 칼럼: 배점 항목 | 평가요소 | 점수
+- 항목명: 첫 번째 행에만, 이후 같은 항목은 빈 셀
+
+[표 3] <h3>일반공급 배점표 (총 12점)</h3> + <table> (일반공급 배점 데이터 있는 경우에만)
+- 칼럼: 배점 항목 | 평가요소 | 점수
+- 항목명: 첫 번째 행에만, 이후 같은 항목은 빈 셀
+
+표 스타일: {STYLE}
+줄글·설명 문장 금지, HTML만 출력"""
+
+    parts = []
+    for prompt in (prompt1,):
+        try:
+            resp = azure_client.chat.completions.create(
+                model=DEPLOYMENT,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_completion_tokens=3500,
+            )
+            result = resp.choices[0].message.content.strip()
+            if result:
+                parts.append(result)
+        except Exception:
+            pass
+
+    return "\n\n".join(parts)
+
+
 def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     """LH 청약 공고 해설 콘텐츠를 생성한다 (task 데이터만 사용)."""
     notice_name  = task.get("notice_name", task.get("topic", ""))
@@ -113,9 +232,19 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     contract_amount  = task.get("contract_amount", "")
     interim_payment  = task.get("interim_payment", "")
     balance_payment  = task.get("balance_payment", "")
-    first_supply     = task.get("first_supply", "")
-    conversion       = task.get("conversion", "")
-    location_detail = task.get("location_detail", "")
+    first_supply         = task.get("first_supply", "")
+    conversion           = task.get("conversion", "")
+    location_detail      = task.get("location_detail", "")
+    supply_this_time     = task.get("supply_this_time", "")
+    restriction_rewin    = task.get("restriction_rewin", "")
+    restriction_resale   = task.get("restriction_resale", "")
+    obligation_residence = task.get("obligation_residence", "")
+    supply_units         = task.get("supply_units", "")
+    notice_phase         = task.get("notice_phase", "")
+    contract_start       = task.get("contract_start", "")
+    contract_end         = task.get("contract_end", "")
+    income_limit         = task.get("income_limit", "")
+    asset_limit          = task.get("asset_limit", "")
 
     blog_name = "llmenginehistory"
     guide = _load_category_guide(blog_name, category)
@@ -132,34 +261,63 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
 - LH·청약·국민임대 등 기본 개념 설명
 - "공고문을 확인하세요", "알아보겠습니다", "살펴보겠습니다"
 - 의미 없는 반복, 뻔한 마무리
+- 소득 기준·자산 기준을 <p> 태그 줄글로 나열하는 것 (반드시 <table> 태그로 출력)
+- 데이터가 없을 때 그 사실을 본문에 언급하는 것 ("데이터가 확인되지 않습니다", "제공된 데이터에 없어", "별도 확인 필요" 등 일체 금지 — 없으면 그냥 해당 항목 생략)
 
 이 공고 유형({supply_type})의 핵심 포인트: {focus}
 
 작성 가이드:
 {guide}"""
 
-    # 필드 요약 (없는 항목은 생략)
-    fields_lines = []
-    if total_units:    fields_lines.append(f"총 세대수: {total_units}")
-    if apply_start:    fields_lines.append(f"신청 시작: {apply_start}")
-    if apply_end:      fields_lines.append(f"신청 마감: {apply_end}")
-    if result_date:    fields_lines.append(f"당첨 발표: {result_date}")
-    if move_in:        fields_lines.append(f"입주 예정: {move_in}")
-    if supply_target:  fields_lines.append(f"공급 대상: {supply_target}")
-    if qualifications: fields_lines.append(f"신청 자격: {qualifications}")
-    if deposit:          fields_lines.append(f"보증금: {deposit}")
-    if monthly_rent:     fields_lines.append(f"월 임대료: {monthly_rent}")
-    if jeonse_amount:    fields_lines.append(f"전세금: {jeonse_amount}")
-    if sale_price:       fields_lines.append(f"분양가: {sale_price}")
-    if contract_amount:  fields_lines.append(f"계약금: {contract_amount}")
-    if interim_payment:  fields_lines.append(f"중도금: {interim_payment}")
-    if balance_payment:  fields_lines.append(f"잔금: {balance_payment}")
-    if house_types:      fields_lines.append(f"주택형: {house_types}")
-    if first_supply:     fields_lines.append(f"우선공급: {first_supply}")
-    if conversion:     fields_lines.append(f"분양전환: {conversion}")
-    if location_detail: fields_lines.append(f"위치: {location_detail}")
+    # 공고 데이터 정리
+    basic_info = {
+        "단지명": notice_name.split("(")[0].strip() if "(" in notice_name else notice_name,
+        "위치": location_detail or region,
+        "총 세대수": total_units,
+        "이번 공급": supply_this_time,
+        "입주 예정일": move_in,
+        "재당첨 제한": restriction_rewin,
+        "전매 제한": restriction_resale,
+        "거주 의무": obligation_residence,
+    }
+    price_info = {
+        "분양가": sale_price,
+        "계약금": contract_amount,
+        "중도금": interim_payment,
+        "잔금": balance_payment,
+        "보증금": deposit,
+        "월 임대료": monthly_rent,
+        "전세금": jeonse_amount,
+        "주택형": house_types,
+        "타입별 공급세대수": supply_units,
+    }
+    contract_period = f"{contract_start} ~ {contract_end}" if contract_start and contract_end else contract_start
+    apply_label = f"{notice_phase} 신청 시작" if notice_phase else "신청 시작"
+    apply_end_label = f"{notice_phase} 신청 마감" if notice_phase else "신청 마감"
+    schedule_info = {
+        apply_label: apply_start,
+        apply_end_label: apply_end,
+        "당첨 발표": result_date,
+        "계약": contract_period,
+        "입주 예정": move_in,
+    }
+    region_short = region.replace("특별시","").replace("광역시","").replace("도","").strip()
 
-    fields_text = "\n".join(fields_lines) if fields_lines else "데이터 추출 미완료"
+    # enriched 구조화 데이터 (있는 경우 우선 사용)
+    _prices        = task.get("_prices", {})
+    _schedule      = task.get("_schedule", {})
+    _qualification = task.get("_qualification", {})
+    _dp            = task.get("_decision_points", [])
+
+    enriched_block = ""
+    if any([_prices, _schedule, _qualification]):
+        enriched_block = f"""
+## PDF 구조화 추출 데이터 (아래 데이터 우선 사용)
+가격: {json.dumps(_prices, ensure_ascii=False)}
+일정: {json.dumps(_schedule, ensure_ascii=False)}
+자격/소득/자산: {json.dumps(_qualification, ensure_ascii=False)}
+판단포인트: {json.dumps(_dp, ensure_ascii=False)}
+"""
 
     user_prompt = f"""아래 LH 청약 공고를 해설하는 블로그 글을 HTML로 작성하세요.
 
@@ -171,27 +329,60 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
 - 원문: {detail_url}
 
 ## 추출된 데이터
-{fields_text}
+기본정보: {basic_info}
+분양/임대 가격: {price_info}
+자격: {qualifications or supply_target}
+우선공급: {first_supply}
+공고단계: {notice_phase or "본청약"}
+일정: {schedule_info}
+분양전환: {conversion}
+소득기준: {income_limit}
+자산기준: {asset_limit}{enriched_block}
 
 ---
 
-출력 형식:
-1. 맨 첫 줄: <!-- TITLE: [SEO 제목] -->
-   - 공고명 그대로 사용 금지
-   - 독자가 검색할 표현으로 작성
-   - 예: "{region.replace('특별시','').replace('광역시','').replace('도','')} {supply_type} 신청 조건 총정리"
+출력 형식 (순서 고정, 아래 그대로):
 
-2. 이후 HTML 본문 (가이드 구조 순서대로):
-   - 핵심 요약 표
-   - 도입 ("이번 공고는..." 금지)
-   - 지역 생활권/교통/수요 2~3문장
-   - 신청 일정 (마감일 굵게)
-   - 신청 자격
-   - 주거 조건
-   - 청약연구소 한줄 코멘트 (형식: <div class="expert-comment"><strong>청약연구소 한줄 코멘트</strong><p>...</p></div>)
-   - 봐야 하는 사람 / 굳이 안 봐도 되는 사람 (두 파트 모두 필수)
+맨 첫 줄: <!-- TITLE: [SEO 제목] -->
+- 공고명 통째 복사 금지 (블록번호·괄호·"입주자모집공고" 제거)
+- 단지명·브랜드명이 있으면 반드시 포함 (독자가 그 이름으로 검색함)
+  예: "e편한세상 분당 퍼스트빌리지 신혼희망타운 청약 신청 조건"
+- 단지명 없는 경우만: "{region_short} {supply_type} 신청 조건 총정리"
 
-데이터 없는 항목은 생략. 억측 금지."""
+---
+
+[섹션 1] 기본 정보 표
+- <table> style: border-collapse:collapse; width:100%; text-align:center;
+- <th> style: background:#f5f5f5; border:1px solid #ddd; padding:10px; text-align:center; width:30%;
+- <td> style: border:1px solid #ddd; padding:10px; text-align:center;
+- 행 항목 (데이터 있는 것만): 단지명 / 위치 / 총 세대수 / 이번 공급 / 입주 예정일 / 재당첨 제한 / 전매 제한 / 거주 의무
+
+[섹션 2] 사업 개요 (<h2>사업 개요</h2>)
+- 단지·지역 특성 (교통, 생활권, 입지) 2~3문장
+- 이 공고를 주목해야 하는 이유 1~2문장
+- "이번 공고는..." 시작 금지
+
+[섹션 3] 분양정보 (<h2>분양정보</h2>) — 임대 타입이면 "임대 조건"으로 대체
+- 타입별 공급 정보 표: 공급면적(㎡) / 사전청약 / 본청약 / 합계 / 분양가 / 평당가
+  - 사전청약·본청약 세대수 데이터 없으면 세대수(합계) 1열로 대체
+  - 평당가 = 분양가 ÷ (공급면적㎡ × 0.3025), 반드시 계산해서 명시
+- 계약금 / 중도금 / 잔금 납부 방법
+- 데이터 없는 항목은 해당 줄 생략, 억측 금지
+
+[섹션 4] 청약 조건 (<h2>청약 조건</h2>)
+- 신청 자격 1~2문장, 우선공급 조건 1문장
+- 소득 기준·자산 기준: 본문에 직접 쓰지 말고 {{QUAL_TABLES}} 플레이스홀더만 삽입
+- 데이터 없는 항목 생략
+
+[섹션 5] 청약 일정 (<h2>청약 일정</h2>)
+- <table> 형태 (리스트 금지)
+- 칼럼: 구분 | 일정
+- 행 레이블은 위 "공고단계" 값을 앞에 붙여서 표기 (예: 공고단계가 "본청약"이면 "본청약 신청 시작", "사전청약"이면 "사전청약 신청 시작")
+- 행 순서: 신청 시작 / 신청 마감 / 당첨 발표 / 계약 / 입주 예정 (데이터 있는 것만)
+- 마감일 셀은 <strong> 처리
+- 표 스타일: border-collapse:collapse; width:100%; text-align:center;
+- th 스타일: background:#f5f5f5; border:1px solid #ddd; padding:10px; text-align:center; width:30%;
+- td 스타일: border:1px solid #ddd; padding:10px; text-align:center;"""
 
     resp = azure_client.chat.completions.create(
         model=DEPLOYMENT,
@@ -211,6 +402,24 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     if not title.startswith("🏠"):
         title = f"🏠 {title}"
     html  = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", raw)
+
+    # 위치 지도 링크 주입 (기본 정보 표 바로 다음)
+    map_html = _build_map_html(location_detail or region)
+    if map_html:
+        html = re.sub(r"(</table>)", r"\1" + "\n" + map_html, html, count=1)
+
+    # 소득자산기준 표 주입 (항상 GPT로 재구성 — task body HTML이 있으면 source로 활용)
+    qual_html = _build_qual_html(
+        income_limit, asset_limit,
+        qual_tables_html=task.get("_qual_tables_html", ""),
+        scoring_text=task.get("_scoring_text", ""),
+    )
+    has_placeholder = "{{QUAL_TABLES}}" in html or "{QUAL_TABLES}" in html
+    if has_placeholder:
+        html = html.replace("{{QUAL_TABLES}}", qual_html)
+        html = html.replace("{QUAL_TABLES}", qual_html)
+    elif qual_html:
+        html = re.sub(r"(<h2>청약 일정</h2>)", f"{qual_html}\n\\1", html, count=1)
 
     return title, html
 
@@ -277,12 +486,22 @@ def run(blog: str, task_file: Optional[Path] = None, dry_run: bool = False):
             print(f"❌ Task 파일 없음: {task_file}")
             return
     else:
-        # 운영 모드: planned에서 priority 순으로 다음 task
         paths["articles_draft"].mkdir(parents=True, exist_ok=True)
         paths["tasks_writing"].mkdir(parents=True, exist_ok=True)
-        task_file = get_next_task(paths["tasks_planned"])
+
+        # llmenginehistory: enriched/ 우선, 없으면 planned/ fallback
+        if blog == "llmenginehistory":
+            enriched_dir = paths["tasks_enriched"]
+            task_file = get_next_task(enriched_dir) if enriched_dir.exists() else None
+            if task_file:
+                print(f"  (enriched task 사용)")
+            else:
+                task_file = get_next_task(paths["tasks_planned"])
+        else:
+            task_file = get_next_task(paths["tasks_planned"])
+
         if not task_file:
-            print(f"처리할 Task 없음 ({paths['tasks_planned']})")
+            print(f"처리할 Task 없음")
             return
 
     task    = parse_task(task_file)
