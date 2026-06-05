@@ -136,7 +136,7 @@ def scrape_notices(max_pages: int = 5) -> list:
 
                 for region in TARGET_REGIONS:
                     url = f"{list_url}?suplyAreaCode={region}&beginPd={begin_pd}"
-                    page.goto(url, timeout=30000)
+                    page.goto(url, timeout=45000, wait_until="domcontentloaded")
                     page.wait_for_load_state("domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1500)
 
@@ -186,14 +186,14 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
     with sync_playwright() as pw:
         browser, context, page = _make_browser(pw)
         try:
-            page.goto(LIST_PAGES[0], timeout=30000)
+            page.goto(LIST_PAGES[0], timeout=45000, wait_until="domcontentloaded")
             page.wait_for_load_state("domcontentloaded", timeout=30000)
             page.wait_for_timeout(2000)
 
             # 목록에서 해당 공고 행 찾기 (3개 목록 페이지 순회)
             found = False
             for list_url in LIST_PAGES:
-                page.goto(list_url, timeout=30000)
+                page.goto(list_url, timeout=45000, wait_until="domcontentloaded")
                 page.wait_for_load_state("domcontentloaded", timeout=30000)
                 page.wait_for_timeout(1500)
                 for page_num in range(1, 15):
