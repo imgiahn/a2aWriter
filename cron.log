@@ -1356,3 +1356,30 @@ Task: 20260606_003
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main 37d4104] auto: 2026-06-06 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 5 files changed, 83 insertions(+)
+ create mode 100644 articles/llmenginehistory/published/20260606_003.html
+ create mode 100644 articles/llmenginehistory/summary/20260606_003.txt
+ rename blogs/llmenginehistory/tasks/{planned => published}/20260606_003.md (100%)
+ rename blogs/mbtireallove/tasks/{planned => writing}/20260531_046.md (100%)
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260531_046
+제목: INFJ ISTP 커플 궁합 – INFJ ISTP 커플 궁합, 조용한 직감과 무심한 현실감의 의외의 케미
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
