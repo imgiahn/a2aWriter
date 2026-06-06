@@ -1310,3 +1310,49 @@ Task: 20260606_002
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main 34d4008] auto: 2026-06-06 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 4 files changed, 73 insertions(+)
+ create mode 100644 articles/llmenginehistory/published/20260606_002.html
+ create mode 100644 articles/llmenginehistory/summary/20260606_002.txt
+ rename blogs/llmenginehistory/tasks/{planned => published}/20260606_002.md (100%)
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260606_003 — 화곡더리브스카이(3차) 공고 해설
+  글 생성 중...
+  제목: 🏠 화곡더리브스카이 서울 임의공급 신청 조건
+  초안 저장: articles/llmenginehistory/draft/20260606_003.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260606_003
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260531_046 — INFJ ISTP 커플 궁합
+  글 생성 중...
+  제목: INFJ ISTP 커플 궁합 – INFJ ISTP 커플 궁합, 조용한 직감과 무심한 현실감의 의외의 케미
+  초안 저장: articles/mbtireallove/draft/20260531_046.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260531_046
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260606_003
+제목: 🏠 화곡더리브스카이 서울 임의공급 신청 조건
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
