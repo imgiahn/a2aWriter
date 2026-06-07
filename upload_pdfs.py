@@ -135,7 +135,8 @@ def main():
         pdf_path    = t.get("pdf_path", "")
         pdf_orig    = t.get("pdf_original_filename", "")
 
-        filename = pdf_orig if pdf_orig else f"{re.sub(r'[/\\\\:*?<>|\"]+', '', notice_name)} 입주자모집공고.pdf"
+        safe_name = re.sub(r'[/\\:*?<>|"]+', '', notice_name)
+        filename = pdf_orig if pdf_orig else f"{safe_name} 입주자모집공고.pdf"
 
         post_id = find_post_id(posts, notice_name)
         if not post_id:
