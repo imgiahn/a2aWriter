@@ -1,4 +1,4 @@
-"""iframe body 직접 주입 방식 테스트"""
+"""textarea 직접 수정 + 스크린샷으로 에디터 상태 확인"""
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
 from pathlib import Path
@@ -9,7 +9,6 @@ BLOG_URL = "https://llmenginehistory.tistory.com"
 draft = Path("articles/llmenginehistory/draft/20260606_001.html").read_text(encoding="utf-8")
 m     = re.match(r"<!-- TITLE: (.+?) -->\n?(.*)", draft, re.DOTALL)
 html  = m.group(2)
-print("주입 HTML 앞80자:", html[:80])
 
 with sync_playwright() as pw:
     ctx = pw.chromium.launch_persistent_context(
@@ -25,58 +24,60 @@ with sync_playwright() as pw:
     page.goto(edit_url, timeout=20000, wait_until="networkidle")
     page.wait_for_timeout(3000)
 
+    # 스크린샷
+    page.screenshot(path="/tmp/editor_state.png")
+    print("스크린샷 저장됨")
+
     page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=12000)
     page.wait_for_timeout(1000)
 
-    # 모든 iframe 확인
-    frames_info = page.evaluate("""() => {
-        const iframes = document.querySelectorAll('iframe');
-        return Array.from(iframes).map((f, i) => ({
-            idx: i, id: f.id, name: f.name, src: f.src.substring(0,80),
-            hasBody: !!(f.contentDocument && f.contentDocument.body),
-            bodyLen: f.contentDocument && f.contentDocument.body ? f.contentDocument.body.innerHTML.length : 0
-        }));
-    }""")
-    print(f"iframe {len(frames_info)}개:")
-    for fi in frames_info:
-        print(f"  [{fi['idx']}] id={fi['id']} hasBody={fi['hasBody']} bodyLen={fi['bodyLen']}")
-
-    # tinyMCE iframe body에 직접 주입
-    result = page.evaluate("""(html) => {
+    # tinyMCE 연결 textarea + 모든 텍스트 영역 확인
+    info = page.evaluate("""(html) => {
         const ed = tinyMCE.activeEditor;
-        if (!ed) return 'no editor';
+        const results = {};
 
-        // 방법 1: iframe body 직접
-        const iframe = ed.iframeElement || document.querySelector('iframe[id*=\"mce\"]');
-        if (iframe && iframe.contentDocument && iframe.contentDocument.body) {
-            iframe.contentDocument.body.innerHTML = html;
-            // tinyMCE에 변경 알림
-            ed.nodeChanged();
-            ed.save();
-            return 'iframe_direct:' + iframe.contentDocument.body.innerHTML.length;
+        // tinyMCE가 연결된 textarea
+        const targetId = ed ? ed.id : null;
+        results.editorId = targetId;
+        results.editorElType = targetId ? (document.getElementById(targetId) ? document.getElementById(targetId).tagName : 'notfound') : 'none';
+
+        // 모든 textarea
+        const tas = Array.from(document.querySelectorAll('textarea'));
+        results.textareas = tas.map(ta => ({
+            id: ta.id, name: ta.name, len: ta.value.length
+        }));
+
+        // textarea에 직접 설정 시도
+        const ta = document.getElementById(targetId);
+        if (ta) {
+            ta.value = html;
+            // React/Vue 상태 업데이트 트리거
+            const evt = new Event('input', {bubbles: true});
+            ta.dispatchEvent(evt);
+            results.taSet = ta.value.length;
         }
 
-        // 방법 2: ed.dom
-        if (ed.getBody) {
-            ed.getBody().innerHTML = html;
-            ed.nodeChanged();
+        // tinyMCE에도 알림
+        if (ed) {
+            ed.setContent(html);
             ed.save();
-            return 'getBody:' + ed.getBody().innerHTML.length;
+            results.edContent = ed.getContent().length;
         }
 
-        return 'failed';
+        return results;
     }""", html)
-    print("주입 결과:", result)
+    print("tinyMCE 에디터 ID:", info.get("editorId"))
+    print("연결 element 타입:", info.get("editorElType"))
+    print("Textarea들:", info.get("textareas"))
+    print("textarea 설정 결과:", info.get("taSet"))
+    print("tinyMCE getContent 길이:", info.get("edContent"))
 
     page.wait_for_timeout(500)
-
-    # 주입 후 에디터 내용 확인
-    after = page.evaluate("() => tinyMCE.activeEditor.getContent().substring(0, 100)")
-    print("주입 후 에디터 앞100자:", after)
 
     # 완료 → 발행
     page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
     page.wait_for_timeout(3000)
+    page.screenshot(path="/tmp/after_complete.png")
 
     modal = page.locator(".ReactModal__Content.editor_layer")
     try:
@@ -91,7 +92,7 @@ with sync_playwright() as pw:
 
     ctx.close()
 
-# 발행 후 포스트 내용 검증
+# 검증
 time.sleep(3)
 r = requests.get("https://llmenginehistory.tistory.com/24",
                  headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
@@ -99,11 +100,7 @@ m2 = re.search(r'class="tt_article_useless_p_margin[^"]*">(.*?)<div class="conta
 if m2:
     text = re.sub(r"<[^>]+>", " ", m2.group(1))
     text = re.sub(r"\s+", " ", text).strip()
-    print("발행 후 포스트 앞300자:", text[:300])
-    # 수정됐는지 확인
     if "분양가" in text and "64A" in text:
-        print("✅ 수정 확인됨! (분양가/타입 정보 포함)")
+        print("✅ 수정 확인됨!")
     else:
-        print("❌ 아직 구버전")
-else:
-    print("본문 패턴 없음")
+        print("❌ 아직 구버전:", text[:200])
