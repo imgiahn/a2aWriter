@@ -113,8 +113,7 @@ def append_pdf_link_to_post(post_id: int, post_title: str, pdf_url: str,
             break
 
     pdf_link_html = (
-        f'\n<hr style="margin:32px 0; border:none; border-top:1px solid #eee;">'
-        f'\n<p style="text-align:center; margin:16px 0;">'
+        f'<p style="text-align:center; margin:8px 0 20px;">'
         f'<a href="{pdf_url}" target="_blank" rel="noopener" '
         f'style="display:inline-block; padding:10px 20px; background:#2563eb; color:#fff; '
         f'border-radius:6px; text-decoration:none; font-size:14px; font-weight:bold;">'
@@ -123,10 +122,23 @@ def append_pdf_link_to_post(post_id: int, post_title: str, pdf_url: str,
 
     # 이미 PDF 링크 있으면 스킵
     if "공고문 원본 PDF" in html:
-        print(f"  ⏭️  이미 PDF 링크 있음")
-        return True
+        print(f"  ⏭️  이미 PDF 링크 있음 — 재삽입")
+        # 기존 링크 제거 후 재삽입 (위치 수정)
+        html = re.sub(
+            r'<hr[^>]*>?\s*<p[^>]*>.*?공고문 원본 PDF.*?</p>\s*',
+            "", html, flags=re.DOTALL
+        )
+        html = re.sub(
+            r'<p[^>]*>.*?공고문 원본 PDF.*?</p>\s*',
+            "", html, flags=re.DOTALL
+        )
 
-    new_content = html + pdf_link_html
+    # 썸네일 <figure> 다음에 삽입, 없으면 맨 앞에
+    if html.lstrip().startswith("<figure"):
+        end = html.find("</figure>") + len("</figure>")
+        new_content = html[:end] + "\n" + pdf_link_html + html[end:]
+    else:
+        new_content = pdf_link_html + html
     slogan = re.sub(r"\s+", "-", re.sub(r"[^\w\s가-힣]", "", post_title).strip())
     payload = {
         "id": str(post_id), "title": post_title, "content": new_content,

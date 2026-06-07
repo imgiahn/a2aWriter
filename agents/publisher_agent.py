@@ -378,20 +378,24 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
         cdn_url = data.get("url", "")
         print(f"  📎 PDF 업로드 완료: {pdf_original_filename} ({data.get('size', 0):,} bytes)")
 
-        # 본문 끝에 다운로드 링크 삽입
+        # 본문 맨 위(썸네일 figure 바로 다음)에 다운로드 링크 삽입
         if not cdn_url or not post_id or not post_html:
             return
         if "공고문 원본 PDF" in post_html:
             return
         pdf_link = (
-            '\n<hr style="margin:32px 0; border:none; border-top:1px solid #eee;">'
-            f'\n<p style="text-align:center; margin:16px 0;">'
+            f'<p style="text-align:center; margin:8px 0 20px;">'
             f'<a href="{cdn_url}" target="_blank" rel="noopener" '
             f'style="display:inline-block; padding:10px 20px; background:#2563eb; color:#fff; '
             f'border-radius:6px; text-decoration:none; font-size:14px; font-weight:bold;">'
             f'📄 공고문 원본 PDF 다운로드</a></p>\n'
         )
-        new_content = post_html + pdf_link
+        # 썸네일 <figure> 다음에 삽입, 없으면 맨 앞에
+        if post_html.startswith("<figure"):
+            end = post_html.find("</figure>") + len("</figure>")
+            new_content = post_html[:end] + "\n" + pdf_link + post_html[end:]
+        else:
+            new_content = pdf_link + post_html
         slogan = _re.sub(r"\s+", "-", _re.sub(r"[^\w\s가-힣]", "", post_title).strip())
         payload = {
             "id": str(post_id), "title": post_title, "content": new_content,
