@@ -1,4 +1,4 @@
-"""티스토리 포스트 편집 단계별 디버깅"""
+"""티스토리 편집 디버깅 v2 — 내용 변경 여부 직접 확인"""
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
 from pathlib import Path
@@ -8,9 +8,8 @@ BLOG_URL = "https://llmenginehistory.tistory.com"
 
 draft = Path("articles/llmenginehistory/draft/20260606_001.html").read_text(encoding="utf-8")
 m     = re.match(r"<!-- TITLE: (.+?) -->\n?(.*)", draft, re.DOTALL)
-title = m.group(1)
 html  = m.group(2)
-print("제목:", title)
+print("주입할 HTML 앞50자:", html[:50])
 print("HTML 길이:", len(html))
 
 with sync_playwright() as pw:
@@ -23,61 +22,81 @@ with sync_playwright() as pw:
     if "login" in page.url:
         auto_login(page, BLOG_URL)
 
-    # 편집 페이지 접속
     edit_url = f"{BLOG_URL}/manage/post/24?returnURL={BLOG_URL}/manage/posts"
-    print("편집 URL:", edit_url)
     page.goto(edit_url, timeout=20000, wait_until="networkidle")
     page.wait_for_timeout(3000)
-    print("현재 URL:", page.url)
 
-    # tinyMCE 대기
-    try:
-        page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=12000)
-        print("tinyMCE 로드됨")
-    except Exception as e:
-        print("tinyMCE 없음:", e)
+    page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=12000)
+    page.wait_for_timeout(1000)
 
-    # 현재 에디터 내용 길이
-    cur_len = page.evaluate("() => { try { return tinyMCE.activeEditor.getContent().length } catch(e) { return -1 } }")
-    print("현재 에디터 내용 길이:", cur_len)
+    # 주입 전 내용 앞 100자 확인
+    before = page.evaluate("() => tinyMCE.activeEditor.getContent().substring(0, 100)")
+    print("주입 전 내용 앞100자:", before)
 
     # 내용 주입
-    injected = page.evaluate(
-        "(html) => { try { const ed=tinyMCE.activeEditor; ed.focus(); ed.setContent(html); ed.save(); return tinyMCE.activeEditor.getContent().length } catch(e) { return -1 } }",
+    page.evaluate(
+        "(html) => { const ed=tinyMCE.activeEditor; ed.focus(); ed.setContent(html); ed.save(); }",
         html
     )
-    print("주입 후 에디터 내용 길이:", injected)
+    page.wait_for_timeout(500)
+
+    # 주입 후 내용 앞 100자 확인
+    after = page.evaluate("() => tinyMCE.activeEditor.getContent().substring(0, 100)")
+    print("주입 후 내용 앞100자:", after)
+
+    if before == after:
+        print("❌ 내용 변경 안됨 — HTML 모드로 시도")
+        # HTML 모드 전환
+        page.locator("button:has-text('기본모드'), .button_mode").first.click()
+        page.wait_for_timeout(500)
+        page.locator("li:has-text('HTML'), button:has-text('HTML')").first.click()
+        page.wait_for_timeout(1500)
+
+        done = page.evaluate("""(html) => {
+            const cm = document.querySelector('.CodeMirror');
+            if (cm && cm.CodeMirror) {
+                cm.CodeMirror.setValue(html);
+                console.log('CodeMirror 설정됨');
+                return 'codemirror';
+            }
+            const ta = document.querySelector('textarea#content, textarea.html-editor');
+            if (ta) { ta.value = html; return 'textarea'; }
+            return null;
+        }""", html)
+        print("HTML 모드 결과:", done)
+    else:
+        print("✅ 내용 변경됨")
 
     # 완료 버튼
-    btn = page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first
-    print("완료 버튼 visible:", btn.is_visible(timeout=3000))
-    btn.click()
+    page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
     page.wait_for_timeout(3000)
-    print("완료 버튼 클릭 후 URL:", page.url)
 
-    # 모달 확인
+    # 모달
     modal = page.locator(".ReactModal__Content.editor_layer")
     try:
         modal.wait_for(state="visible", timeout=5000)
-        print("모달 나타남")
-        print("모달 내용:", modal.inner_text()[:300])
-        # 공개 라디오 체크
         radio = page.locator("#open20")
         if radio.count() > 0:
             radio.check(timeout=3000)
-            print("공개 라디오 체크됨")
         page.wait_for_timeout(500)
-        # publish-btn
-        pub_btn = page.query_selector("#publish-btn")
-        if pub_btn:
-            print("publish-btn 있음:", pub_btn.inner_text())
-            page.evaluate("document.getElementById('publish-btn').click()")
-            page.wait_for_timeout(3000)
-            print("publish-btn 클릭 후 URL:", page.url)
-        else:
-            print("publish-btn 없음 — 버튼 목록:", [b.inner_text()[:20] for b in page.query_selector_all("button")])
+        page.evaluate("document.getElementById('publish-btn').click()")
+        page.wait_for_timeout(4000)
+        print("발행 완료. URL:", page.url)
     except Exception as e:
-        print("모달 없음:", str(e)[:100])
-        print("페이지 버튼들:", [b.inner_text()[:20] for b in page.query_selector_all("button")[:10]])
+        print("모달 없음:", str(e)[:80])
 
     ctx.close()
+
+# 발행 후 포스트 내용 확인
+import requests, time
+time.sleep(2)
+r = requests.get("https://llmenginehistory.tistory.com/24",
+                 headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+for kw in ["table", "분양가", "청약접수", "오피스텔"]:
+    if kw in r.text:
+        idx = r.text.index(kw)
+        chunk = re.sub(r"<[^>]+>", " ", r.text[max(0,idx-50):idx+200])
+        print(f"[{kw}] {re.sub(chr(10)+chr(32)+'+', ' ', chunk)[:150]}")
+        break
+else:
+    print("본문 키워드 없음 — HTML 길이:", len(r.text))
