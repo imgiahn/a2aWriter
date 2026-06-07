@@ -353,7 +353,7 @@ def _write_task_file(folder: Path, task_id: str, item: dict, fields: dict,
                      category: str, housing_source: str, task_priority: str,
                      pdf_text: str = "", qual_fields: dict = None,
                      qual_tables_html: str = "", pdf_path: str = "",
-                     scoring_text: str = ""):
+                     scoring_text: str = "", pdf_original_filename: str = ""):
     """Task 파일을 생성한다. planner 운영/개발 모드 공통 사용."""
     folder.mkdir(parents=True, exist_ok=True)
     notice_id   = item.get("notice_id", "")
@@ -418,6 +418,7 @@ created_by: planner_agent
 created_at: {date.today().isoformat()}
 has_pdf: {has_pdf_flag}
 pdf_path: {pdf_path}
+pdf_original_filename: {pdf_original_filename}
 ---
 {qual_section}
 
@@ -504,8 +505,9 @@ def cheongyak_run(paths: dict):
             detail_text = detail["text"]
             pdf_text    = detail.get("pdf_text", "")
             pdf_bytes   = detail.get("pdf_bytes", b"")
+        pdf_orig_filename = detail.get("pdf_filename", "") if not cached_pdf else ""
         if pdf_text:
-            print(f"    📄 PDF {detail.get('pdf_filename','')[:30]} ({len(pdf_text)}자)")
+            print(f"    📄 PDF {pdf_orig_filename[:30]} ({len(pdf_text)}자)")
         combined    = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
         fields           = extract_notice_fields(combined, supply_type)
         qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
@@ -526,6 +528,7 @@ def cheongyak_run(paths: dict):
             housing_source=housing_source, task_priority=task_priority,
             pdf_text=pdf_text, qual_tables_html=qual_tables_html,
             pdf_path=pdf_disk_path, scoring_text=scoring_text,
+            pdf_original_filename=pdf_orig_filename,
         )
         print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
         created += 1
@@ -600,8 +603,9 @@ def applyhome_run(paths: dict):
                 detail_text = ""
                 pdf_text    = ""
                 pdf_bytes   = b""
+        pdf_orig_filename = (detail.get("pdf_filename", "") if not cached_pdf else "")
         if pdf_text:
-            print(f"    📄 PDF ({len(pdf_text)}자)")
+            print(f"    📄 PDF {pdf_orig_filename[:30]} ({len(pdf_text)}자)")
 
         combined         = detail_text + ("\n\n=== PDF 원문 ===\n" + pdf_text if pdf_text else "")
         fields           = extract_notice_fields(combined, supply_type)
@@ -620,11 +624,6 @@ def applyhome_run(paths: dict):
 
         category = get_housing_category(supply_type)
 
-        # fields에 없는 값 item에서 보완
-        for key in ("apply_start", "apply_end", "result_date"):
-            if not fields.get(key):
-                pass  # applyhome 상세에서 GPT 추출
-
         _write_task_file(
             folder=paths["planned"],
             task_id=get_next_task_id(paths["planned"]),
@@ -632,6 +631,7 @@ def applyhome_run(paths: dict):
             housing_source=housing_source, task_priority=task_priority,
             pdf_text=pdf_text, qual_tables_html=qual_tables_html,
             pdf_path=pdf_disk_path, scoring_text=scoring_text,
+            pdf_original_filename=pdf_orig_filename,
         )
         print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
         created += 1

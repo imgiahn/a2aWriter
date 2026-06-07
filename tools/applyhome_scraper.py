@@ -233,12 +233,19 @@ def fetch_detail_with_pdf(notice_id: str, list_type: str = "APT분양", house_se
 
     pdf_m = _re.search(r'href="(https://static\.applyhome\.co\.kr[^"]*getAtchmnfl[^"]*)"', html)
     if pdf_m:
-        pdf_url      = pdf_m.group(1)
-        pdf_filename = f"applyhome_{notice_id}.pdf"
+        pdf_url = pdf_m.group(1)
         print(f"  📎 PDF 발견, 다운로드 중...", file=sys.stderr)
         try:
             pdf_resp  = _req.get(pdf_url, headers=HEADERS, timeout=30)
             pdf_bytes = pdf_resp.content
+            # Content-Disposition에서 원본 파일명 추출
+            cd = pdf_resp.headers.get("Content-Disposition", "")
+            cd_m = _re.search(r"filename\*?=['\"]?(?:UTF-8'')?([^'\";\s]+)", cd, _re.IGNORECASE)
+            if cd_m:
+                import urllib.parse as _up
+                pdf_filename = _up.unquote(cd_m.group(1))
+            else:
+                pdf_filename = f"applyhome_{notice_id}.pdf"
             if pdf_bytes:
                 pdf_text = extract_price_focused(pdf_bytes)
                 print(f"    📄 PDF {len(pdf_text)}자", file=sys.stderr)

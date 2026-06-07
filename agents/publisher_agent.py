@@ -235,6 +235,59 @@ def post_article(page: Page, blog_url: str, title: str, content: str):
     page.wait_for_timeout(3000)
 
 
+def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Path):
+    """발행된 task의 PDF를 티스토리에 첨부파일로 업로드한다.
+
+    task 파일의 pdf_path + pdf_original_filename 필드를 읽어 업로드.
+    파일 없거나 필드 미설정 시 조용히 스킵.
+    업로드 엔드포인트: POST /manage/post/attach.json (multipart/form-data)
+    """
+    import requests as _req
+
+    task_path = published_task_path
+    if not task_path.exists():
+        return
+
+    task_text = task_path.read_text(encoding="utf-8")
+    pdf_path = ""
+    pdf_original_filename = ""
+    for line in task_text.splitlines():
+        if line.startswith("pdf_path:"):
+            pdf_path = line.split(":", 1)[1].strip()
+        elif line.startswith("pdf_original_filename:"):
+            pdf_original_filename = line.split(":", 1)[1].strip()
+
+    if not pdf_path or not pdf_original_filename:
+        return
+
+    from pathlib import Path as _Path
+    pdf_file = _Path(pdf_path)
+    if not pdf_file.exists():
+        return
+
+    # 쿠키 추출
+    cookies = {c["name"]: c["value"] for c in context.cookies() if "tistory" in c.get("domain", "")}
+
+    upload_url = f"{blog_url}/manage/post/attach.json"
+    headers = {
+        "Referer":          f"{blog_url}/manage/newpost/",
+        "Origin":           blog_url,
+        "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    files = {"file": (pdf_original_filename, pdf_file.read_bytes(), "application/pdf")}
+
+    try:
+        resp = _req.post(upload_url, files=files, cookies=cookies, headers=headers, timeout=60)
+        if resp.status_code == 200:
+            data = resp.json()
+            print(f"  📎 PDF 업로드 완료: {pdf_original_filename} ({data.get('size', 0):,} bytes)")
+        else:
+            print(f"  ⚠️  PDF 업로드 실패: {resp.status_code}")
+    except Exception as e:
+        print(f"  ⚠️  PDF 업로드 오류: {e}")
+
+
 def run(blog: str):
     print("=" * 50)
     print(f"Publisher Agent — {blog}")
@@ -291,6 +344,9 @@ def run(blog: str):
             shutil.copy(str(draft_src), str(paths["articles_pub"] / f"{task_id}.html"))
             save_summary(task_id, html, paths["articles_summary"])
             print(f"✅ 발행 완료 → tasks/published/")
+
+            # PDF 첨부파일 업로드 (pdf_path + pdf_original_filename이 있는 경우)
+            _upload_pdf_attachment(page, blog_url, context, paths["tasks_published"] / task_file.name)
         except Exception as e:
             shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
             print(f"❌ 발행 실패: {e} → tasks/failed/")

@@ -292,6 +292,37 @@ class TistoryClient:
         return posts
 
     # ──────────────────────────────────────────────
+    # 파일 업로드
+    # ──────────────────────────────────────────────
+
+    def upload_file(self, file_path: str, original_filename: str) -> Optional[dict]:
+        """PDF 등 파일을 티스토리에 업로드하고 첨부파일 정보를 반환한다.
+
+        엔드포인트: POST /manage/post/attach.json (multipart/form-data)
+        반환값: {"name": str, "url": str, "key": str, "filename": str, "size": int}
+        """
+        import requests as _req
+        from pathlib import Path as _Path
+
+        if not self.ensure_login():
+            return None
+
+        file_bytes = _Path(file_path).read_bytes()
+        url     = f"{self.blog_url}/manage/post/attach.json"
+        headers = {
+            "Referer":          f"{self.blog_url}/manage/newpost/",
+            "Origin":           self.blog_url,
+            "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        files = {"file": (original_filename, file_bytes, "application/pdf")}
+
+        resp = _req.post(url, files=files, cookies=self._cookies, headers=headers, timeout=60)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+
+    # ──────────────────────────────────────────────
     # 내부 헬퍼
     # ──────────────────────────────────────────────
 
