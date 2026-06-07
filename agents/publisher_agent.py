@@ -403,7 +403,7 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
             "tag": "", "acceptComment": 1, "published": 0,
             "password": "", "uselessMarginForEntry": 1,
             "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
-            "thumbnail": None, "type": "post", "attachments": [],
+            "type": "post", "attachments": [],
             "recaptchaValue": "", "draftSequence": None, "totalWritingTimeMs": 3000,
         }
         put_hdrs = {
@@ -494,6 +494,12 @@ def run(blog: str):
                 print(f"  🎨 썸네일 생성 중...")
                 img_bytes = generate_thumbnail(task_meta)
                 if img_bytes:
+                    # 썸네일 캐시 저장 (재생성 방지)
+                    thumb_cache = _os.path.join("data", blog, "thumbnails", f"{task_id}.png")
+                    _os.makedirs(_os.path.dirname(thumb_cache), exist_ok=True)
+                    with open(thumb_cache, "wb") as _f:
+                        _f.write(img_bytes)
+
                     # 임시 파일 저장 (대표이미지 파일 업로드용)
                     tmp = _tmp.NamedTemporaryFile(suffix=".png", delete=False)
                     tmp.write(img_bytes)

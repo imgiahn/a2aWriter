@@ -146,7 +146,7 @@ def append_pdf_link_to_post(post_id: int, post_title: str, pdf_url: str,
         "tag": "", "acceptComment": 1, "published": 0,
         "password": "", "uselessMarginForEntry": 1,
         "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
-        "thumbnail": None, "type": "post", "attachments": [],
+        "type": "post", "attachments": [],
         "recaptchaValue": "", "draftSequence": None, "totalWritingTimeMs": 3000,
     }
     hdrs = {
