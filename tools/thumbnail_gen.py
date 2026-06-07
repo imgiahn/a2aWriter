@@ -38,6 +38,28 @@ REGION_HINT = {
 }
 
 
+def _shorten_title(name: str, max_len: int = 13) -> str:
+    """공고명을 10~15자 이내 짧은 제목으로 변환."""
+    import re as _re
+    # 괄호 내용 제거
+    name = _re.sub(r"\([^)]*\)", "", name).strip()
+    name = _re.sub(r"\[[^\]]*\]", "", name).strip()
+    # 불필요한 접미어 제거
+    for suffix in ["입주자모집공고", "예비입주자", "모집공고", "공고", " 신청", " 모집"]:
+        if name.endswith(suffix):
+            name = name[:-len(suffix)].strip()
+    if len(name) <= max_len:
+        return name
+    # 공백 기준으로 자르기
+    parts = name.split()
+    result = ""
+    for p in parts:
+        if len(result) + len(p) + 1 > max_len:
+            break
+        result = (result + " " + p).strip()
+    return result or name[:max_len]
+
+
 def _build_prompt(task: dict) -> str:
     category = task.get("housing_category", "general")
     region   = task.get("region", "")
@@ -45,14 +67,15 @@ def _build_prompt(task: dict) -> str:
 
     style    = CATEGORY_STYLE.get(category, CATEGORY_STYLE["general"])
     region_h = REGION_HINT.get(region, "한국 도시 전경")
+    short_title = _shorten_title(name)
 
     prompt = (
         f"한국 부동산 청약 블로그 썸네일 이미지. "
         f"{style}. {region_h}. "
         f"파란 하늘과 구름, 황금빛 햇살, 선명한 색감. "
-        f"전문적이고 신뢰감 있는 분위기. "
-        f"사진 스타일, 고해상도, 넓은 앵글, 깔끔한 구도. "
-        f"텍스트 없음."
+        f"이미지 중앙 하단부에 반투명 어두운 배경 위에 흰색 한글 굵은 텍스트로 "
+        f'"{short_title}" 라고 크고 선명하게 적혀 있음. '
+        f"전문적이고 신뢰감 있는 분위기. 사진 스타일, 고해상도, 넓은 앵글."
     )
     return prompt
 
