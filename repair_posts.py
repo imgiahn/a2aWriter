@@ -203,8 +203,13 @@ def find_post_id_by_title(cookies: dict, title_keyword: str) -> str:
 
 
 def put_post_content(cookies: dict, post_id: str, title: str, html: str) -> bool:
-    """PUT /manage/post/{id}.json 으로 내용 직접 업데이트."""
+    """PUT /manage/post/{id}.json 으로 내용 직접 업데이트.
+
+    필수 payload 구조 (Tistory 발행 시 실제 전송 필드 기준):
+      visibility: 20 (공개), published: 0 (기존 발행 시각 유지), 등
+    """
     import requests as _req
+    import re as _re
 
     url = f"{BLOG_URL}/manage/post/{post_id}.json"
     headers = {
@@ -215,22 +220,37 @@ def put_post_content(cookies: dict, post_id: str, title: str, html: str) -> bool
         "X-Requested-With": "XMLHttpRequest",
     }
 
-    # 현재 포스트 정보 먼저 GET해서 기존 필드 보존
-    get_r = _req.get(url, cookies=cookies, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
-    if get_r.status_code == 200:
-        try:
-            existing = get_r.json()
-        except Exception:
-            existing = {}
-    else:
-        existing = {}
+    # 슬로건: 제목에서 특수문자 제거, 공백→하이픈
+    slogan = _re.sub(r"[^\w\s가-힣]", "", title)
+    slogan = _re.sub(r"\s+", "-", slogan.strip())
 
-    payload = {**existing, "id": post_id, "title": title, "content": html}
+    payload = {
+        "id":                   post_id,
+        "title":                title,
+        "content":              html,
+        "slogan":               slogan,
+        "visibility":           20,      # 20 = 공개
+        "category":             0,
+        "tag":                  "",
+        "acceptComment":        1,
+        "published":            0,       # 0 = 기존 발행 시각 유지
+        "password":             "",
+        "uselessMarginForEntry": 1,
+        "daumLike":             None,
+        "cclCommercial":        0,
+        "cclDerive":            0,
+        "thumbnail":            None,
+        "type":                 "post",
+        "attachments":          [],
+        "recaptchaValue":       "",
+        "draftSequence":        None,
+        "totalWritingTimeMs":   5000,
+    }
 
     resp = _req.put(url, json=payload, cookies=cookies, headers=headers, timeout=20)
     print(f"    PUT {url} → {resp.status_code}")
     if resp.status_code not in (200, 201, 204):
-        print(f"    응답: {resp.text[:200]}")
+        print(f"    응답: {resp.text[:300]}")
         return False
     return True
 
