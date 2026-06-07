@@ -1,16 +1,11 @@
-"""발행 시 네트워크 요청 캡처"""
+"""원래 발행 시 PUT body 전체 캡처 (truncation 없이)"""
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
-from pathlib import Path
-import re, json
+import json
 
 BLOG_URL = "https://llmenginehistory.tistory.com"
 
-draft = Path("articles/llmenginehistory/draft/20260606_001.html").read_text(encoding="utf-8")
-m     = re.match(r"<!-- TITLE: (.+?) -->\n?(.*)", draft, re.DOTALL)
-html  = m.group(2)
-
-api_calls = []
+captured_body = {}
 
 with sync_playwright() as pw:
     ctx = pw.chromium.launch_persistent_context(
@@ -19,15 +14,13 @@ with sync_playwright() as pw:
     page = ctx.new_page()
 
     def on_request(req):
-        url = req.url
-        if any(k in url for k in ["save", "publish", "post", "write", "edit", "entry"]):
-            if req.method in ("POST", "PUT", "PATCH"):
-                body = ""
-                try:
-                    body = req.post_data or ""
-                except:
-                    pass
-                api_calls.append({"method": req.method, "url": url, "body": body[:300]})
+        if req.method == "PUT" and "/manage/post/" in req.url and ".json" in req.url:
+            try:
+                body = req.post_data or ""
+                captured_body["raw"] = body
+                captured_body["url"] = req.url
+            except Exception as e:
+                captured_body["err"] = str(e)
 
     page.on("request", on_request)
 
@@ -35,14 +28,13 @@ with sync_playwright() as pw:
     if "login" in page.url:
         auto_login(page, BLOG_URL)
 
-    edit_url = f"{BLOG_URL}/manage/post/24?returnURL={BLOG_URL}/manage/posts"
-    page.goto(edit_url, timeout=20000, wait_until="networkidle")
+    # 포스트 23번(화성동탄2, 이미 정상인 것)으로 테스트 — 내용 바꾸지 않고 그냥 발행
+    page.goto(f"{BLOG_URL}/manage/post/23?returnURL={BLOG_URL}/manage/posts",
+              timeout=20000, wait_until="networkidle")
     page.wait_for_timeout(3000)
-
     page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=12000)
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(500)
 
-    # 완료 → 발행 (내용 수정 없이 그냥 눌러서 어떤 API 호출되는지 확인)
     page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
     page.wait_for_timeout(3000)
 
@@ -54,12 +46,21 @@ with sync_playwright() as pw:
         page.evaluate("document.getElementById('publish-btn').click()")
         page.wait_for_timeout(4000)
     except Exception as e:
-        print("모달 없음:", str(e)[:60])
+        print("모달:", str(e)[:60])
 
     ctx.close()
 
-print(f"\n캡처된 API 호출 {len(api_calls)}개:")
-for c in api_calls:
-    print(f"\n  {c['method']} {c['url']}")
-    if c["body"]:
-        print(f"  body: {c['body'][:400]}")
+if "raw" in captured_body:
+    try:
+        body = json.loads(captured_body["raw"])
+        print("PUT URL:", captured_body["url"])
+        print("PUT 필드 목록:", list(body.keys()))
+        # content 제외하고 나머지 필드 출력
+        for k, v in body.items():
+            if k != "content":
+                print(f"  {k}: {v}")
+    except Exception as e:
+        print("파싱 오류:", e)
+        print("raw 앞500자:", captured_body["raw"][:500])
+else:
+    print("PUT 캡처 실패:", captured_body)
