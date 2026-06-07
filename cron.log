@@ -1797,3 +1797,21 @@ After doing this, you may fix the identity used for this commit with:
  create mode 100644 articles/mbtireallove/published/20260531_051.html
  create mode 100644 articles/mbtireallove/summary/20260531_051.txt
  rename blogs/mbtireallove/tasks/{writing => published}/20260531_051.md (100%)
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260531_052 — INTJ ISTP 커플 궁합
+  글 생성 중...
+  제목: INTJ ISTP 커플 궁합 – 조용한 전략가와 무심한 해결사의 현실 연애 궁합
+  초안 저장: articles/mbtireallove/draft/20260531_052.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260531_052
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260531_052
+제목: INTJ ISTP 커플 궁합 – 조용한 전략가와 무심한 해결사의 현실 연애 궁합
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
