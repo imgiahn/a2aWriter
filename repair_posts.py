@@ -142,26 +142,31 @@ def regenerate_html(task_id: str) -> bool:
 # ─── 4. 티스토리 포스트 수정 ────────────────────────────────────────
 
 def find_post_edit_url(page, title: str) -> str:
-    """manage/posts 목록에서 제목으로 포스트 편집 URL 찾기."""
+    """manage/posts 목록에서 제목으로 포스트 편집 URL 찾기.
+
+    Tistory 구조: a.link_cont (제목) / a.btn_post (수정 버튼) 같은 인덱스로 매핑
+    편집 URL 형식: /manage/post/{id}?returnURL=...
+    """
+    keyword = title[:15]
     for page_num in range(1, 6):
-        url = f"{BLOG_URL}/manage/posts?page={page_num}"
-        page.goto(url, timeout=20000, wait_until="domcontentloaded")
+        page.goto(f"{BLOG_URL}/manage/posts?page={page_num}",
+                  timeout=20000, wait_until="domcontentloaded")
         page.wait_for_timeout(1500)
 
-        # 제목 링크 탐색
-        rows = page.query_selector_all("table tbody tr, .post-list li, .list_post tr")
-        for row in rows:
-            row_text = row.inner_text()
-            if title[:15] in row_text:
-                edit_link = row.query_selector("a[href*='/manage/post/edit/'], a:has-text('수정')")
-                if edit_link:
-                    href = edit_link.get_attribute("href")
-                    if href:
-                        if href.startswith("/"):
-                            href = BLOG_URL + href
-                        return href
-        # 다음 페이지 없으면 종료
-        if not page.query_selector(f"a[href*='page={page_num+1}']"):
+        title_links = page.query_selector_all("a.link_cont")
+        edit_links  = page.query_selector_all("a.btn_post")
+
+        for i, tl in enumerate(title_links):
+            t_attr = tl.get_attribute("title") or ""
+            t_text = tl.inner_text()
+            if keyword in t_attr or keyword in t_text:
+                if i < len(edit_links):
+                    href = edit_links[i].get_attribute("href") or ""
+                    if href.startswith("/"):
+                        href = BLOG_URL + href
+                    return href
+
+        if not page.query_selector(f"a[href*='page={page_num + 1}']"):
             break
     return ""
 
