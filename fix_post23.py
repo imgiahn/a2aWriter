@@ -27,10 +27,13 @@ with sync_playwright() as pw:
     ctx.close()
 
 # HTML
-html_path = Path("articles/llmenginehistory/published/20260605_011.html")
+for folder in ("preview", "draft", "published"):
+    html_path = Path(f"articles/llmenginehistory/{folder}/20260605_011.html")
+    if html_path.exists():
+        break
 post_html = re.sub(r"<!-- TITLE: .+? -->\n?", "",
                    html_path.read_text(encoding="utf-8"), flags=re.DOTALL)
-print(f"HTML 길이: {len(post_html)}")
+print(f"HTML 경로: {html_path} / 길이: {len(post_html)}")
 
 # 이미지 생성
 task = {"notice_name": "화성동탄2 공공분양", "region": "경기",
