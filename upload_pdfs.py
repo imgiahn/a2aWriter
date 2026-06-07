@@ -92,8 +92,13 @@ def main():
         posts = []
         for page_num in range(1, 10):
             page.goto(f"{BLOG_URL}/manage/posts?page={page_num}",
-                      timeout=20000, wait_until="domcontentloaded")
-            page.wait_for_timeout(1500)
+                      timeout=30000, wait_until="networkidle")
+            page.wait_for_timeout(2000)
+            # 포스트 목록 렌더링 대기
+            try:
+                page.wait_for_selector("a.link_cont", timeout=8000)
+            except Exception:
+                pass
 
             result = page.evaluate("""() => {
                 const items = [];
