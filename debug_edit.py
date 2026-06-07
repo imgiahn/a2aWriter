@@ -1,16 +1,15 @@
-"""티스토리 편집 디버깅 v2 — 내용 변경 여부 직접 확인"""
+"""iframe body 직접 주입 방식 테스트"""
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
 from pathlib import Path
-import re
+import re, requests, time
 
 BLOG_URL = "https://llmenginehistory.tistory.com"
 
 draft = Path("articles/llmenginehistory/draft/20260606_001.html").read_text(encoding="utf-8")
 m     = re.match(r"<!-- TITLE: (.+?) -->\n?(.*)", draft, re.DOTALL)
 html  = m.group(2)
-print("주입할 HTML 앞50자:", html[:50])
-print("HTML 길이:", len(html))
+print("주입 HTML 앞80자:", html[:80])
 
 with sync_playwright() as pw:
     ctx = pw.chromium.launch_persistent_context(
@@ -29,74 +28,82 @@ with sync_playwright() as pw:
     page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=12000)
     page.wait_for_timeout(1000)
 
-    # 주입 전 내용 앞 100자 확인
-    before = page.evaluate("() => tinyMCE.activeEditor.getContent().substring(0, 100)")
-    print("주입 전 내용 앞100자:", before)
+    # 모든 iframe 확인
+    frames_info = page.evaluate("""() => {
+        const iframes = document.querySelectorAll('iframe');
+        return Array.from(iframes).map((f, i) => ({
+            idx: i, id: f.id, name: f.name, src: f.src.substring(0,80),
+            hasBody: !!(f.contentDocument && f.contentDocument.body),
+            bodyLen: f.contentDocument && f.contentDocument.body ? f.contentDocument.body.innerHTML.length : 0
+        }));
+    }""")
+    print(f"iframe {len(frames_info)}개:")
+    for fi in frames_info:
+        print(f"  [{fi['idx']}] id={fi['id']} hasBody={fi['hasBody']} bodyLen={fi['bodyLen']}")
 
-    # 내용 주입
-    page.evaluate(
-        "(html) => { const ed=tinyMCE.activeEditor; ed.focus(); ed.setContent(html); ed.save(); }",
-        html
-    )
+    # tinyMCE iframe body에 직접 주입
+    result = page.evaluate("""(html) => {
+        const ed = tinyMCE.activeEditor;
+        if (!ed) return 'no editor';
+
+        // 방법 1: iframe body 직접
+        const iframe = ed.iframeElement || document.querySelector('iframe[id*=\"mce\"]');
+        if (iframe && iframe.contentDocument && iframe.contentDocument.body) {
+            iframe.contentDocument.body.innerHTML = html;
+            // tinyMCE에 변경 알림
+            ed.nodeChanged();
+            ed.save();
+            return 'iframe_direct:' + iframe.contentDocument.body.innerHTML.length;
+        }
+
+        // 방법 2: ed.dom
+        if (ed.getBody) {
+            ed.getBody().innerHTML = html;
+            ed.nodeChanged();
+            ed.save();
+            return 'getBody:' + ed.getBody().innerHTML.length;
+        }
+
+        return 'failed';
+    }""", html)
+    print("주입 결과:", result)
+
     page.wait_for_timeout(500)
 
-    # 주입 후 내용 앞 100자 확인
+    # 주입 후 에디터 내용 확인
     after = page.evaluate("() => tinyMCE.activeEditor.getContent().substring(0, 100)")
-    print("주입 후 내용 앞100자:", after)
+    print("주입 후 에디터 앞100자:", after)
 
-    if before == after:
-        print("❌ 내용 변경 안됨 — HTML 모드로 시도")
-        # HTML 모드 전환
-        page.locator("button:has-text('기본모드'), .button_mode").first.click()
-        page.wait_for_timeout(500)
-        page.locator("li:has-text('HTML'), button:has-text('HTML')").first.click()
-        page.wait_for_timeout(1500)
-
-        done = page.evaluate("""(html) => {
-            const cm = document.querySelector('.CodeMirror');
-            if (cm && cm.CodeMirror) {
-                cm.CodeMirror.setValue(html);
-                console.log('CodeMirror 설정됨');
-                return 'codemirror';
-            }
-            const ta = document.querySelector('textarea#content, textarea.html-editor');
-            if (ta) { ta.value = html; return 'textarea'; }
-            return null;
-        }""", html)
-        print("HTML 모드 결과:", done)
-    else:
-        print("✅ 내용 변경됨")
-
-    # 완료 버튼
+    # 완료 → 발행
     page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
     page.wait_for_timeout(3000)
 
-    # 모달
     modal = page.locator(".ReactModal__Content.editor_layer")
     try:
         modal.wait_for(state="visible", timeout=5000)
-        radio = page.locator("#open20")
-        if radio.count() > 0:
-            radio.check(timeout=3000)
+        page.locator("#open20").check(timeout=3000)
         page.wait_for_timeout(500)
         page.evaluate("document.getElementById('publish-btn').click()")
         page.wait_for_timeout(4000)
-        print("발행 완료. URL:", page.url)
+        print("발행 완료")
     except Exception as e:
-        print("모달 없음:", str(e)[:80])
+        print("모달 없음:", str(e)[:60])
 
     ctx.close()
 
-# 발행 후 포스트 내용 확인
-import requests, time
-time.sleep(2)
+# 발행 후 포스트 내용 검증
+time.sleep(3)
 r = requests.get("https://llmenginehistory.tistory.com/24",
                  headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-for kw in ["table", "분양가", "청약접수", "오피스텔"]:
-    if kw in r.text:
-        idx = r.text.index(kw)
-        chunk = re.sub(r"<[^>]+>", " ", r.text[max(0,idx-50):idx+200])
-        print(f"[{kw}] {re.sub(chr(10)+chr(32)+'+', ' ', chunk)[:150]}")
-        break
+m2 = re.search(r'class="tt_article_useless_p_margin[^"]*">(.*?)<div class="container_postbtn', r.text, re.DOTALL)
+if m2:
+    text = re.sub(r"<[^>]+>", " ", m2.group(1))
+    text = re.sub(r"\s+", " ", text).strip()
+    print("발행 후 포스트 앞300자:", text[:300])
+    # 수정됐는지 확인
+    if "분양가" in text and "64A" in text:
+        print("✅ 수정 확인됨! (분양가/타입 정보 포함)")
+    else:
+        print("❌ 아직 구버전")
 else:
-    print("본문 키워드 없음 — HTML 길이:", len(r.text))
+    print("본문 패턴 없음")
