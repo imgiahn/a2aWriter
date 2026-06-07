@@ -9,7 +9,7 @@
 
 **a2aWriter** — Planner → Writer → Publisher 3-Agent 자동 블로그 발행 시스템
 
-- **EC2 서버:** 13.61.144.167 (Amazon Linux, KST)
+- **EC2 서버:** AWS EC2 (Amazon Linux, KST) — IP는 .env 또는 팀 내부 공유
 - **GitHub:** https://github.com/imgiahn/a2aWriter
 - **운영 블로그 2개:**
   - `mbtireallove` — MBTI 궁합 시리즈 (티스토리)

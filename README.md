@@ -13,7 +13,7 @@
 | 수집 소스 | LH 청약플러스(분양 mi=1027) + 청약홈(APT분양·오피스텔·잔여세대) |
 | 대상 지역 | 서울 / 경기 / 인천 |
 | 발행 글 형식 | AI 썸네일 + PDF 다운로드 버튼 + 공고 해설 본문 |
-| EC2 서버 | 13.61.144.167 (Amazon Linux, Asia/Seoul KST) |
+| EC2 서버 | AWS EC2 (Amazon Linux, Asia/Seoul KST) |
 
 ---
 
