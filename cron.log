@@ -1597,3 +1597,49 @@ Task: 20260606_004
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main ef2232f] auto: 2026-06-07 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 4 files changed, 73 insertions(+)
+ create mode 100644 articles/llmenginehistory/published/20260606_004.html
+ create mode 100644 articles/llmenginehistory/summary/20260606_004.txt
+ rename blogs/llmenginehistory/tasks/{planned => published}/20260606_004.md (100%)
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260606_005 — 경기광주역 롯데캐슬 시그니처 1단지 공고 해설
+  글 생성 중...
+  제목: 🏠 경기광주역 롯데캐슬 시그니처 1단지 무순위(사후) 신청 조건
+  초안 저장: articles/llmenginehistory/draft/20260606_005.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260606_005
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260531_050 — INFP ISTP 커플 궁합
+  글 생성 중...
+  제목: INFP ISTP 커플 궁합 – 감성은 깊고 표현은 담백한, INFP ISTP 커플의 온도차 연애
+  초안 저장: articles/mbtireallove/draft/20260531_050.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260531_050
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260606_005
+제목: 🏠 경기광주역 롯데캐슬 시그니처 1단지 무순위(사후) 신청 조건
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
