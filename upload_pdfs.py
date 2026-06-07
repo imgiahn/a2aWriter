@@ -40,23 +40,103 @@ def find_post_id(posts: list, notice_name: str) -> int:
     return 0
 
 
-def upload_pdf(post_id: int, pdf_path: str, filename: str, cookies: dict) -> bool:
-    url = f"{BLOG_URL}/manage/post/attach.json"
-    headers = {
+def upload_and_attach(post_id: int, pdf_path: str, filename: str,
+                      post_title: str, cookies: dict) -> bool:
+    """PDF 업로드 → CDN URL 획득 → 포스트 내용 앞에 다운로드 링크 삽입 → PUT."""
+    # 1. 파일 업로드
+    attach_url = f"{BLOG_URL}/manage/post/attach.json"
+    hdrs = {
         "Referer":          f"{BLOG_URL}/manage/newpost/",
         "Origin":           BLOG_URL,
         "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "X-Requested-With": "XMLHttpRequest",
     }
     pdf_bytes = Path(pdf_path).read_bytes()
-    files = {"file": (filename, pdf_bytes, "application/pdf")}
-    resp = requests.post(url, files=files, cookies=cookies, headers=headers, timeout=60)
-    if resp.status_code == 200:
-        data = resp.json()
-        print(f"    ✅ {filename} ({data.get('size', 0):,} bytes)")
-        return True
-    print(f"    ❌ HTTP {resp.status_code}: {resp.text[:150]}")
-    return False
+    resp = requests.post(attach_url,
+                         files={"file": (filename, pdf_bytes, "application/pdf")},
+                         cookies=cookies, headers=hdrs, timeout=60)
+    if resp.status_code != 200:
+        print(f"    ❌ 업로드 실패 HTTP {resp.status_code}")
+        return False
+
+    data     = resp.json()
+    cdn_url  = data.get("url", "")
+    size_kb  = data.get("size", 0) // 1024
+    print(f"    📎 업로드 완료: {filename} ({size_kb:,} KB)")
+    print(f"    🔗 CDN URL: {cdn_url[:80]}...")
+
+    # 2. 다운로드 링크 HTML 생성
+    link_html = (
+        f'<div style="margin:12px 0;padding:12px 16px;background:#f8f9fa;'
+        f'border-left:4px solid #0066cc;border-radius:4px;">'
+        f'📄 원문 공고 PDF: '
+        f'<a href="{cdn_url}" target="_blank" rel="noopener">{filename}</a>'
+        f'&nbsp;<span style="color:#888;font-size:0.85em;">({size_kb:,} KB)</span>'
+        f'</div>\n'
+    )
+
+    # 3. 현재 포스트 내용 가져오기 (preview HTML 사용)
+    task_id   = None
+    post_html = None
+    preview_dir = Path(f"articles/{BLOG}/preview")
+    draft_dir   = Path(f"articles/{BLOG}/draft")
+    pub_dir     = Path(f"articles/{BLOG}/published")
+
+    # notice_name 키워드로 대응 파일 탐색
+    title_kw = re.sub(r"\s+", "", post_title[:8])
+    for d in [preview_dir, draft_dir, pub_dir]:
+        for f in sorted(d.glob("*.html"), reverse=True):
+            content = f.read_text(encoding="utf-8")
+            if title_kw in re.sub(r"\s+", "", content[:500]):
+                post_html = re.sub(r"<!-- TITLE: .+? -->\n?", "", content, flags=re.DOTALL)
+                task_id   = f.stem
+                break
+        if post_html:
+            break
+
+    if not post_html:
+        print(f"    ⚠️  포스트 HTML 못 찾음, 링크만 추가")
+        post_html = ""
+
+    new_content = link_html + post_html
+
+    # 4. PUT으로 포스트 업데이트
+    slogan = re.sub(r"[^\w\s가-힣]", "", post_title)
+    slogan = re.sub(r"\s+", "-", slogan.strip())
+    payload = {
+        "id":                    str(post_id),
+        "title":                 post_title,
+        "content":               new_content,
+        "slogan":                slogan,
+        "visibility":            20,
+        "category":              0,
+        "tag":                   "",
+        "acceptComment":         1,
+        "published":             0,
+        "password":              "",
+        "uselessMarginForEntry": 1,
+        "daumLike":              None,
+        "cclCommercial":         0,
+        "cclDerive":             0,
+        "thumbnail":             None,
+        "type":                  "post",
+        "attachments":           [{"name": filename, "url": cdn_url,
+                                   "key": data.get("key", ""), "size": data.get("size", 0)}],
+        "recaptchaValue":        "",
+        "draftSequence":         None,
+        "totalWritingTimeMs":    5000,
+    }
+    put_hdrs = {
+        "Content-Type":    "application/json;charset=UTF-8",
+        "Referer":         f"{BLOG_URL}/manage/newpost/{post_id}?type=post",
+        "Origin":          BLOG_URL,
+        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    put_resp = requests.put(f"{BLOG_URL}/manage/post/{post_id}.json",
+                            json=payload, cookies=cookies, headers=put_hdrs, timeout=20)
+    print(f"    PUT → {put_resp.status_code}")
+    return put_resp.status_code in (200, 201, 204)
 
 
 def main():
@@ -153,9 +233,10 @@ def main():
             skip += 1
             continue
 
+        post_title = next((p["title"] for p in posts if p["id"] == post_id), notice_name)
         print(f"[{task_id}] 포스트 {post_id} — {notice_name[:30]}")
         print(f"  파일명: {filename}")
-        if upload_pdf(post_id, pdf_path, filename, cookies):
+        if upload_and_attach(post_id, pdf_path, filename, post_title, cookies):
             ok += 1
         else:
             skip += 1
