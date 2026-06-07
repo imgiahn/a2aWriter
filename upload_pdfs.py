@@ -25,10 +25,18 @@ def parse_task(path: Path) -> dict:
 
 
 def find_post_id(posts: list, notice_name: str) -> int:
-    keyword = re.sub(r"\s+", "", notice_name[:10])
-    for p in posts:
-        if keyword in re.sub(r"\s+", "", p["title"]):
-            return p["id"]
+    # 괄호/대괄호 내용 제거 후 다양한 길이로 시도
+    clean = re.sub(r"\([^)]*\)", "", notice_name)
+    clean = re.sub(r"\[[^\]]*\]", "", clean)
+    clean = re.sub(r"\s+", "", clean.strip())
+
+    for length in [10, 8, 6, 5, 4]:
+        kw = clean[:length]
+        if not kw:
+            continue
+        for p in posts:
+            if kw in re.sub(r"\s+", "", p["title"]):
+                return p["id"]
     return 0
 
 
