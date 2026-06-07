@@ -589,7 +589,9 @@ def applyhome_run(paths: dict):
             print(f"    📄 PDF 캐시 사용 ({len(pdf_text)}자)")
         else:
             try:
-                detail      = ah_fetch(notice_id)
+                detail      = ah_fetch(notice_id,
+                                       list_type=item.get("list_type", "APT분양"),
+                                       house_secd=item.get("house_secd", ""))
                 detail_text = detail["text"]
                 pdf_text    = detail.get("pdf_text", "")
                 pdf_bytes   = detail.get("pdf_bytes", b"")

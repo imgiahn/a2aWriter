@@ -42,11 +42,12 @@ def _make_browser(pw):
     return browser, context, page
 
 
-def _parse_rows(page: Page, region: str, apt_only: bool = False) -> list:
+def _parse_rows(page: Page, region: str, apt_only: bool = False, list_type: str = "APT분양") -> list:
     """현재 페이지 테이블에서 공고 목록을 파싱한다.
 
     apt_only=True: APT 분양 페이지 → 민영만 수집 (국민/공공은 LH에서 처리)
     청약기간 셀은 ~ 기호로 동적 탐색 (페이지별 열 구조가 다름)
+    list_type: "APT분양" | "오피스텔/도시형" | "APT잔여세대" — 상세 API 라우팅용
     """
     from datetime import date as _date
     import re as _re
@@ -55,8 +56,9 @@ def _parse_rows(page: Page, region: str, apt_only: bool = False) -> list:
     rows = page.query_selector_all("table tbody tr")
     items = []
     for row in rows:
-        pbno = row.get_attribute("data-pbno") or ""
-        honm = row.get_attribute("data-honm") or ""
+        pbno   = row.get_attribute("data-pbno") or ""
+        honm   = row.get_attribute("data-honm") or ""
+        hsecd  = row.get_attribute("data-hsecd") or ""
         if not pbno:
             continue
         cells = row.query_selector_all("td")
@@ -114,6 +116,8 @@ def _parse_rows(page: Page, region: str, apt_only: bool = False) -> list:
             "housing_source": housing_source,
             "priority":       priority,
             "list_mi":        "applyhome",
+            "list_type":      list_type,
+            "house_secd":     hsecd,
         })
     return items
 
@@ -153,7 +157,7 @@ def scrape_notices(max_pages: int = 5) -> list:
                                 pass
 
                         try:
-                            rows_found = _parse_rows(page, region, apt_only=apt_only)
+                            rows_found = _parse_rows(page, region, apt_only=apt_only, list_type=label)
                         except Exception:
                             rows_found = []
                         new_rows   = [r for r in rows_found if r["notice_id"] not in seen_ids]
@@ -170,10 +174,14 @@ def scrape_notices(max_pages: int = 5) -> list:
     return results
 
 
-def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
+def fetch_detail_with_pdf(notice_id: str, list_type: str = "APT분양", house_secd: str = "", **kwargs) -> dict:
     """공고 상세 텍스트 + PDF bytes를 반환한다.
 
-    Playwright 대신 requests로 AJAX API 직접 호출 — 훨씬 안정적.
+    list_type에 따라 올바른 API 엔드포인트를 사용한다:
+      - "APT분양":      selectAPTLttotPblancDetail.do        (AIA01M01)
+      - "오피스텔/도시형": selectPRMOLttotPblancDetailView.do  (AIA02M01, houseSecd 필요)
+      - "APT잔여세대":   selectAPTRemndrLttotPblancDetailView.do (AIA03M01)
+
     lh_scraper.py와 동일한 반환 형식:
       {"text": str, "pdf_text": str, "pdf_filename": str, "pdf_bytes": bytes}
     """
@@ -187,13 +195,24 @@ def fetch_detail_with_pdf(notice_id: str, **kwargs) -> dict:
         import requests as _req
         from tools.pdf_parser import extract_price_focused
 
-    DETAIL_API = f"{BASE_URL}/ai/aia/selectAPTLttotPblancDetail.do"
+    if list_type == "오피스텔/도시형":
+        DETAIL_API = f"{BASE_URL}/ai/aia/selectPRMOLttotPblancDetailView.do"
+        REFERER    = f"{BASE_URL}/ai/aia/selectOtherLttotPblancListView.do"
+        payload    = f"houseManageNo={notice_id}&pblancNo={notice_id}&houseSecd={house_secd}&gvPgmId=AIA02M01"
+    elif list_type == "APT잔여세대":
+        DETAIL_API = f"{BASE_URL}/ai/aia/selectAPTRemndrLttotPblancDetailView.do"
+        REFERER    = f"{BASE_URL}/ai/aia/selectAPTRemndrLttotPblancListView.do"
+        payload    = f"houseManageNo={notice_id}&pblancNo={notice_id}&gvPgmId=AIA03M01"
+    else:  # APT분양 (기본값)
+        DETAIL_API = f"{BASE_URL}/ai/aia/selectAPTLttotPblancDetail.do"
+        REFERER    = f"{BASE_URL}/ai/aia/selectAPTLttotPblancListView.do"
+        payload    = f"houseManageNo={notice_id}&pblancNo={notice_id}&gvPgmId=AIA01M01"
+
     HEADERS = {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Referer":      f"{BASE_URL}/ai/aia/selectAPTLttotPblancListView.do",
+        "Referer":      REFERER,
         "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
-    payload = f"houseManageNo={notice_id}&pblancNo={notice_id}&gvPgmId=AIA01M01"
 
     try:
         resp = _req.post(DETAIL_API, data=payload, headers=HEADERS, timeout=20)
