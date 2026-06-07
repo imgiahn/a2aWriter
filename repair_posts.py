@@ -22,18 +22,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 BLOG      = "llmenginehistory"
 BLOG_URL  = "https://llmenginehistory.tistory.com"
 TASKS_DIR = Path(f"blogs/{BLOG}/tasks/published")
-DRAFT_DIR = Path(f"articles/{BLOG}/draft")
+DRAFT_DIR = Path(f"articles/{BLOG}/preview")
 PUB_DIR   = Path(f"articles/{BLOG}/published")
 
 # 수정 대상: (task_id, notice_id, list_type, house_secd)
 TARGETS = [
-    ("20260606_001", "2026950052", "오피스텔/도시형", "02"),  # 풍무역 푸르지오 시티
-    ("20260606_002", "2026910138", "APT잔여세대",     ""),   # 청계 노르웨이숲(9차)
-    ("20260606_003", "2026940110", "APT잔여세대",     ""),   # 화곡더리브스카이(3차)
-    ("20260606_004", "2026940112", "APT잔여세대",     ""),   # 더샵 분당센트로(2차)
-    ("20260606_005", "2026910130", "APT잔여세대",     ""),   # 경기광주역 롯데캐슬
-    ("20260606_006", "2026910146", "APT잔여세대",     ""),   # 동탄 그웬 160
-    ("20260606_007", "2026930020", "APT잔여세대",     ""),   # 신검단중앙역 금강펜테리움
+    ("20260606_001", "2026950052", "오피스텔/도시형", "02"),  # 풍무역 푸르지오 시티 (미수정)
 ]
 
 
