@@ -55,7 +55,7 @@ slogan = re.sub(r"\s+", "-", slogan.strip())
 
 payload = {
     "id": str(POST_ID), "title": title, "content": new_content,
-    "slogan": slogan, "visibility": 20, "category": 0,
+    "slogan": "", "visibility": 20, "category": 0,
     "tag": "", "acceptComment": 1, "published": 0,
     "password": "", "uselessMarginForEntry": 1,
     "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
