@@ -3,12 +3,14 @@ repair_posts.py — 빈 껍데기로 발행된 청약홈 공고 글 재수집 & 
 
 대상: 20260606_001 ~ 20260606_007 (오피스텔/APT잔여세대 — 잘못된 API 엔드포인트로 데이터 공백)
 흐름: 상세 API 재수집 → GPT 필드 추출 → task .md 업데이트 → writer --dry-run → 티스토리 수정
+티스토리 수정: 쿠키 추출 → PUT /manage/post/{id}.json 직접 호출
 """
 
 import os
 import re
 import sys
 import time
+import json
 import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
@@ -40,10 +42,9 @@ TARGETS = [
 def fetch_and_extract(notice_id: str, list_type: str, house_secd: str, supply_type: str) -> dict:
     from tools.applyhome_scraper import fetch_detail_with_pdf
     from agents.planner_agent import extract_notice_fields, _save_pdf_to_disk
-    from tools.pdf_parser import extract_price_focused
 
     print(f"    상세 API 호출 [{list_type}] ...")
-    detail     = fetch_detail_with_pdf(notice_id, list_type=list_type, house_secd=house_secd)
+    detail      = fetch_detail_with_pdf(notice_id, list_type=list_type, house_secd=house_secd)
     detail_text = detail["text"]
     pdf_text    = detail.get("pdf_text", "")
     pdf_bytes   = detail.get("pdf_bytes", b"")
@@ -58,7 +59,6 @@ def fetch_and_extract(notice_id: str, list_type: str, house_secd: str, supply_ty
     print()
 
     _save_pdf_to_disk(notice_id, pdf_bytes)
-
     combined = detail_text + ("\n\n=== PDF ===\n" + pdf_text if pdf_text else "")
     fields   = extract_notice_fields(combined, supply_type)
     fields["_has_pdf"]  = bool(pdf_text)
@@ -109,7 +109,6 @@ def update_task_file(task_id: str, fields: dict):
     for key, val in FIELD_MAP:
         text = replace_field(text, key, val)
 
-    # qualifications 다중줄 처리
     qual = fields.get("qualifications", "")
     if qual:
         qual_block = "qualifications: |\n  " + qual.replace("\n", "\n  ")
@@ -135,111 +134,104 @@ def regenerate_html(task_id: str) -> bool:
     if result.returncode != 0:
         print(f"    ⚠️  writer 오류: {result.stderr[-300:]}")
         return False
-    draft = DRAFT_DIR / f"{task_id}.html"
-    return draft.exists()
+    return (DRAFT_DIR / f"{task_id}.html").exists()
 
 
-# ─── 4. 티스토리 포스트 수정 ────────────────────────────────────────
+# ─── 4. Tistory 쿠키 추출 ──────────────────────────────────────────
 
-def find_post_edit_url(page, title: str) -> str:
-    """manage/posts 목록에서 제목으로 포스트 편집 URL 찾기.
+def get_tistory_cookies() -> dict:
+    """Playwright browser_data에서 Tistory 쿠키를 추출한다."""
+    from playwright.sync_api import sync_playwright
+    from agents.publisher_agent import auto_login
 
-    Tistory 구조: a.link_cont(제목) → closest li/container → a[href*='/manage/post/'] 수정 버튼
-    편집 URL 형식: /manage/post/{id}?returnURL=...
-    """
-    keyword = title[:15]
-    for page_num in range(1, 6):
-        page.goto(f"{BLOG_URL}/manage/posts?page={page_num}",
-                  timeout=20000, wait_until="domcontentloaded")
-        page.wait_for_timeout(1500)
+    cookies = {}
+    with sync_playwright() as pw:
+        ctx = pw.chromium.launch_persistent_context(
+            user_data_dir="browser_data", headless=True,
+            args=["--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
+        page = ctx.new_page()
+        page.goto(f"{BLOG_URL}/manage", timeout=15000, wait_until="networkidle")
+        if "login" in page.url:
+            print("  세션 만료 → 자동 로그인...")
+            auto_login(page, BLOG_URL)
+            page.goto(f"{BLOG_URL}/manage", timeout=15000, wait_until="networkidle")
 
-        title_links = page.query_selector_all("a.link_cont")
-        for tl in title_links:
-            t_attr = tl.get_attribute("title") or ""
-            t_text = tl.inner_text()
-            if keyword in t_attr or keyword in t_text:
-                # 같은 포스트 컨테이너(li)에서 수정 버튼 탐색
-                edit_href = page.evaluate("""el => {
-                    const container = el.closest('li') || el.closest('tr')
-                        || el.parentElement.parentElement.parentElement.parentElement;
-                    const btn = container.querySelector('a[href*=\"/manage/post/\"][href*=\"returnURL\"]');
-                    return btn ? btn.getAttribute('href') : null;
-                }""", tl)
-                if edit_href:
-                    if edit_href.startswith("/"):
-                        edit_href = BLOG_URL + edit_href
-                    return edit_href
+        for c in ctx.cookies():
+            if "tistory" in c.get("domain", ""):
+                cookies[c["name"]] = c["value"]
+        ctx.close()
 
-        if not page.query_selector(f"a[href*='page={page_num + 1}']"):
-            break
-    return ""
+    print(f"  쿠키 {len(cookies)}개 추출")
+    return cookies
 
 
-def update_tistory_post(page, title: str, html: str) -> bool:
-    """PUT /manage/post/{id}.json API 인터셉터로 content 교체 후 발행."""
-    edit_url = find_post_edit_url(page, title)
-    if not edit_url:
-        print(f"    ⚠️  포스트 편집 URL 못 찾음: {title[:20]}")
+# ─── 5. PUT API로 티스토리 포스트 수정 ─────────────────────────────
+
+def find_post_id_by_title(cookies: dict, title_keyword: str) -> str:
+    """manage/posts 페이지 파싱으로 포스트 ID 찾기."""
+    from playwright.sync_api import sync_playwright
+    from agents.publisher_agent import auto_login
+
+    with sync_playwright() as pw:
+        ctx = pw.chromium.launch_persistent_context(
+            user_data_dir="browser_data", headless=True,
+            args=["--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
+        page = ctx.new_page()
+        page.goto(f"{BLOG_URL}/manage/posts", timeout=20000, wait_until="networkidle")
+        if "login" in page.url:
+            auto_login(page, BLOG_URL)
+            page.goto(f"{BLOG_URL}/manage/posts", timeout=20000, wait_until="networkidle")
+
+        post_id = page.evaluate(f"""() => {{
+            const keyword = {json.dumps(title_keyword[:15])};
+            let found = null;
+            document.querySelectorAll('a.link_cont').forEach(lk => {{
+                const t = lk.getAttribute('title') || lk.textContent;
+                if (t.includes(keyword)) {{
+                    const container = lk.closest('li') || lk.parentElement.parentElement.parentElement.parentElement;
+                    const btn = container ? container.querySelector('a.btn_post') : null;
+                    if (btn) {{
+                        const m = btn.getAttribute('href').match(/\\/manage\\/post\\/(\\d+)/);
+                        if (m) found = m[1];
+                    }}
+                }}
+            }});
+            return found;
+        }}""")
+        ctx.close()
+    return post_id or ""
+
+
+def put_post_content(cookies: dict, post_id: str, title: str, html: str) -> bool:
+    """PUT /manage/post/{id}.json 으로 내용 직접 업데이트."""
+    import requests as _req
+
+    url = f"{BLOG_URL}/manage/post/{post_id}.json"
+    headers = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Referer": f"{BLOG_URL}/manage/newpost/{post_id}?type=post",
+        "Origin": BLOG_URL,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+    # 현재 포스트 정보 먼저 GET해서 기존 필드 보존
+    get_r = _req.get(url, cookies=cookies, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
+    if get_r.status_code == 200:
+        try:
+            existing = get_r.json()
+        except Exception:
+            existing = {}
+    else:
+        existing = {}
+
+    payload = {**existing, "id": post_id, "title": title, "content": html}
+
+    resp = _req.put(url, json=payload, cookies=cookies, headers=headers, timeout=20)
+    print(f"    PUT {url} → {resp.status_code}")
+    if resp.status_code not in (200, 201, 204):
+        print(f"    응답: {resp.text[:200]}")
         return False
-
-    # 포스트 ID 추출
-    m = re.search(r"/manage/post/(\d+)", edit_url)
-    if not m:
-        print(f"    ⚠️  포스트 ID 추출 실패: {edit_url}")
-        return False
-    post_id = m.group(1)
-    print(f"    편집 URL: {edit_url} (ID={post_id})")
-
-    import json as _json
-
-    # PUT 요청을 가로채서 content를 새 HTML로 교체
-    new_html_ref = {"html": html, "intercepted": False}
-
-    def intercept_put(route, request):
-        if request.method == "PUT" and f"/manage/post/{post_id}.json" in request.url:
-            try:
-                body = _json.loads(request.post_data or "{}")
-                body["content"] = new_html_ref["html"]
-                new_html_ref["intercepted"] = True
-                route.continue_(post_data=_json.dumps(body))
-            except Exception as e:
-                print(f"    ⚠️  인터셉트 오류: {e}")
-                route.continue_()
-        else:
-            route.continue_()
-
-    page.route(f"**/{post_id}.json", intercept_put)
-
-    page.goto(edit_url, timeout=20000, wait_until="networkidle")
-    page.wait_for_timeout(2000)
-
-    page.wait_for_function(
-        "typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null",
-        timeout=10000,
-    )
-    page.wait_for_timeout(500)
-
-    # 완료 → 발행 버튼 (내용 수정 없이 — 인터셉터가 교체)
-    page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
-    page.wait_for_timeout(2000)
-
-    modal = page.locator('.ReactModal__Content.editor_layer')
-    try:
-        modal.wait_for(state='visible', timeout=8000)
-        page.locator('#open20').check(timeout=5000)
-        page.wait_for_timeout(800)
-        page.evaluate("document.getElementById('publish-btn').click()")
-        page.wait_for_timeout(4000)
-    except Exception:
-        page.wait_for_timeout(2000)
-
-    page.unroute(f"**/{post_id}.json")
-
-    if not new_html_ref["intercepted"]:
-        print(f"    ⚠️  PUT 인터셉트 안됨")
-        return False
-
-    print(f"    ✅ PUT 인터셉트 성공")
     return True
 
 
@@ -255,22 +247,16 @@ def read_draft_html(task_id: str):
 # ─── 메인 ────────────────────────────────────────────────────────────
 
 def main(tistory_only: bool = False):
-    from playwright.sync_api import sync_playwright
-    from agents.publisher_agent import is_logged_in, auto_login
     import shutil
-
-    BROWSER_DATA_DIR = Path("browser_data")
 
     print("=" * 55)
     print("Repair — 빈 껍데기 공고 글 재수집 & 티스토리 수정")
     print("=" * 55)
 
     if tistory_only:
-        # HTML이 이미 재생성된 경우 — 티스토리 수정만
         success_ids = [t[0] for t in TARGETS if (DRAFT_DIR / f"{t[0]}.html").exists()]
         print(f"--tistory-only: draft HTML {len(success_ids)}개 확인됨")
     else:
-        # ── Step 1 & 2: 상세 수집 → task 업데이트 ──
         for task_id, notice_id, list_type, house_secd in TARGETS:
             task_path   = TASKS_DIR / f"{task_id}.md"
             supply_type = ""
@@ -289,7 +275,6 @@ def main(tistory_only: bool = False):
             except Exception as e:
                 print(f"    ❌ 수집 오류: {e}")
 
-        # ── Step 3: HTML 재생성 ──
         print("\n" + "=" * 55)
         print("HTML 재생성 (writer --dry-run)")
         print("=" * 55)
@@ -306,48 +291,43 @@ def main(tistory_only: bool = False):
             print("❌ 재생성된 HTML 없음. 종료.")
             return
 
-    # ── Step 4: 티스토리 수정 ──
+    # ── 쿠키 추출 ──
     print("\n" + "=" * 55)
-    print("티스토리 포스트 수정")
+    print("티스토리 쿠키 추출")
+    print("=" * 55)
+    cookies = get_tistory_cookies()
+    if not cookies:
+        print("❌ 쿠키 추출 실패")
+        return
+
+    # ── PUT API로 직접 수정 ──
+    print("\n" + "=" * 55)
+    print("티스토리 PUT API 직접 수정")
     print("=" * 55)
 
-    with sync_playwright() as pw:
-        context = pw.chromium.launch_persistent_context(
-            user_data_dir=str(BROWSER_DATA_DIR),
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-        )
-        page = context.new_page()
+    for task_id in success_ids:
+        title, html = read_draft_html(task_id)
+        print(f"\n[{task_id}] {title[:40]}")
 
-        # 로그인 확인 → 필요시 자동 로그인
-        page.goto(f"{BLOG_URL}/manage", timeout=15000)
-        page.wait_for_load_state("networkidle", timeout=10000)
-        if "login" in page.url or "/manage" not in page.url:
-            print("  세션 만료 → 자동 로그인 시도...")
-            if not auto_login(page, BLOG_URL):
-                print("❌ 자동 로그인 실패. setup_browser.py를 먼저 실행하세요.")
-                context.close()
-                return
+        # 포스트 ID 찾기
+        post_id = find_post_id_by_title(cookies, title)
+        if not post_id:
+            print(f"    ⚠️  포스트 ID 못 찾음")
+            continue
 
-        print("✅ 로그인 세션 확인")
-
-        for task_id in success_ids:
-            title, html = read_draft_html(task_id)
-            print(f"\n[{task_id}] {title[:40]}")
-            try:
-                ok = update_tistory_post(page, title, html)
-                if ok:
-                    shutil.copy(
-                        str(DRAFT_DIR / f"{task_id}.html"),
-                        str(PUB_DIR   / f"{task_id}.html"),
-                    )
-                    print(f"    ✅ 티스토리 수정 완료")
-                else:
-                    print(f"    ❌ 수정 실패")
-            except Exception as e:
-                print(f"    ❌ 오류: {e}")
-
-        context.close()
+        print(f"    포스트 ID: {post_id}")
+        try:
+            ok = put_post_content(cookies, post_id, title, html)
+            if ok:
+                shutil.copy(
+                    str(DRAFT_DIR / f"{task_id}.html"),
+                    str(PUB_DIR   / f"{task_id}.html"),
+                )
+                print(f"    ✅ 수정 완료")
+            else:
+                print(f"    ❌ PUT 실패")
+        except Exception as e:
+            print(f"    ❌ 오류: {e}")
 
     print("\n✅ repair 완료")
 
@@ -355,6 +335,6 @@ def main(tistory_only: bool = False):
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tistory-only", action="store_true", help="티스토리 수정만 실행 (HTML 재생성 스킵)")
+    ap.add_argument("--tistory-only", action="store_true")
     args = ap.parse_args()
     main(tistory_only=args.tistory_only)
