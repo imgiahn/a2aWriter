@@ -144,7 +144,7 @@ def regenerate_html(task_id: str) -> bool:
 def find_post_edit_url(page, title: str) -> str:
     """manage/posts 목록에서 제목으로 포스트 편집 URL 찾기.
 
-    Tistory 구조: a.link_cont (제목) / a.btn_post (수정 버튼) 같은 인덱스로 매핑
+    Tistory 구조: a.link_cont(제목) → closest li/container → a[href*='/manage/post/'] 수정 버튼
     편집 URL 형식: /manage/post/{id}?returnURL=...
     """
     keyword = title[:15]
@@ -154,17 +154,21 @@ def find_post_edit_url(page, title: str) -> str:
         page.wait_for_timeout(1500)
 
         title_links = page.query_selector_all("a.link_cont")
-        edit_links  = page.query_selector_all("a.btn_post")
-
-        for i, tl in enumerate(title_links):
+        for tl in title_links:
             t_attr = tl.get_attribute("title") or ""
             t_text = tl.inner_text()
             if keyword in t_attr or keyword in t_text:
-                if i < len(edit_links):
-                    href = edit_links[i].get_attribute("href") or ""
-                    if href.startswith("/"):
-                        href = BLOG_URL + href
-                    return href
+                # 같은 포스트 컨테이너(li)에서 수정 버튼 탐색
+                edit_href = page.evaluate("""el => {
+                    const container = el.closest('li') || el.closest('tr')
+                        || el.parentElement.parentElement.parentElement.parentElement;
+                    const btn = container.querySelector('a[href*=\"/manage/post/\"][href*=\"returnURL\"]');
+                    return btn ? btn.getAttribute('href') : null;
+                }""", tl)
+                if edit_href:
+                    if edit_href.startswith("/"):
+                        edit_href = BLOG_URL + edit_href
+                    return edit_href
 
         if not page.query_selector(f"a[href*='page={page_num + 1}']"):
             break
