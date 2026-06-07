@@ -1,13 +1,10 @@
-"""티스토리 첨부 버튼 클릭 → 업로드 API 캡처"""
+"""tinyMCE 내부에서 첨부 버튼 탐색 + 업로드 API 캡처"""
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
 from pathlib import Path
 
 BLOG_URL = "https://llmenginehistory.tistory.com"
-
 test_pdf = list(Path("data/llmenginehistory/notices").rglob("original.pdf"))[0]
-print("테스트 PDF:", test_pdf, "크기:", test_pdf.stat().st_size)
-
 upload_reqs = []
 
 with sync_playwright() as pw:
@@ -17,19 +14,12 @@ with sync_playwright() as pw:
     page = ctx.new_page()
 
     def on_req(req):
-        if req.method == "POST":
-            body = ""
-            try:
-                body = (req.post_data or "")[:80]
-            except Exception:
-                pass
-            upload_reqs.append(f"POST {req.url[:120]} | body={body}")
-
+        if req.method == "POST" and "kakao" not in req.url and "sentry" not in req.url:
+            upload_reqs.append(f"POST {req.url[:150]}")
     def on_resp(resp):
-        if resp.request.method == "POST" and resp.status in (200, 201):
+        if resp.request.method == "POST" and "kakao" not in resp.url and "sentry" not in resp.url:
             try:
-                body = resp.text()[:200]
-                upload_reqs.append(f"  RESP {resp.status}: {body}")
+                upload_reqs.append(f"  RESP {resp.status}: {resp.text()[:300]}")
             except Exception:
                 pass
 
@@ -46,31 +36,70 @@ with sync_playwright() as pw:
     page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=10000)
     page.wait_for_timeout(1000)
 
-    # "첨부" 버튼 클릭 (title="첨부")
-    attach_btn = page.query_selector("button[title='첨부']")
-    if attach_btn:
-        print("첨부 버튼 발견, 클릭...")
-        with page.expect_file_chooser(timeout=5000) as fc_info:
-            attach_btn.click()
+    # tinyMCE 모든 버튼 탐색 (JavaScript 내부)
+    btn_info = page.evaluate("""() => {
+        const btns = document.querySelectorAll('[title],[aria-label]');
+        return Array.from(btns)
+            .filter(el => {
+                const t = el.getAttribute('title') || el.getAttribute('aria-label') || '';
+                return t.includes('첨부') || t.includes('파일') || t.includes('attach') || t.includes('file');
+            })
+            .map(el => ({
+                tag: el.tagName,
+                title: el.getAttribute('title') || el.getAttribute('aria-label'),
+                cls: el.className.substring(0, 60),
+                id: el.id
+            }));
+    }""")
+    print(f"첨부/파일 관련 요소 {len(btn_info)}개:")
+    for b in btn_info:
+        print(f"  {b}")
+
+    # tinyMCE 버튼 컨트롤로 직접 클릭
+    click_result = page.evaluate("""() => {
+        try {
+            const ed = tinymce.activeEditor;
+            // 컨트롤 목록에서 파일 버튼 찾기
+            const controls = ed.theme.panel ? ed.theme.panel.find('button') : [];
+            const fileBtn = controls.filter(c => {
+                const t = c.tooltip && c.tooltip() || c.settings && c.settings.tooltip || '';
+                return t.includes('첨부') || t.includes('파일');
+            });
+            if (fileBtn.length > 0) {
+                fileBtn[0].fire('click');
+                return 'clicked: ' + (fileBtn[0].tooltip ? fileBtn[0].tooltip() : 'btn');
+            }
+            return 'not found. controls=' + controls.length;
+        } catch(e) { return 'err: ' + e.message; }
+    }""")
+    print("버튼 클릭 결과:", click_result)
+
+    # file chooser 대기
+    try:
+        with page.expect_file_chooser(timeout=4000) as fc_info:
+            pass
         fc = fc_info.value
-        print("File chooser 열림! accept:", fc.is_multiple())
+        print("File chooser 열림!")
         fc.set_files(str(test_pdf))
         page.wait_for_timeout(5000)
-        print("파일 설정 완료")
-    else:
-        print("첨부 버튼 없음")
-        # tistory-attacher 플러그인 직접 호출 시도
-        result = page.evaluate("""() => {
-            try {
-                const ed = tinymce.activeEditor;
-                const plugin = ed.plugins['tistory-attacher'];
-                return plugin ? Object.getOwnPropertyNames(plugin.__proto__) : 'no plugin';
-            } catch(e) { return 'err: ' + e.message; }
-        }""")
-        print("tistory-attacher 메서드:", result)
+    except Exception as e:
+        print("File chooser 없음:", str(e)[:60])
+
+    # 대안: tistory-attacher 직접 호출
+    attacher_result = page.evaluate("""() => {
+        try {
+            const ed = tinymce.activeEditor;
+            // tistory-attacher 플러그인의 openDialog 등 시도
+            const a = ed.plugins['tistory-attacher'];
+            const methods = [];
+            for (let key in a) methods.push(key);
+            return 'attacher methods: ' + methods.join(', ');
+        } catch(e) { return 'err: ' + e.message; }
+    }""")
+    print("attacher:", attacher_result)
 
     ctx.close()
 
-print(f"\n캡처된 POST 요청:")
+print(f"\n캡처된 POST 요청 {len(upload_reqs)}개:")
 for r in upload_reqs:
     print(" ", r)
