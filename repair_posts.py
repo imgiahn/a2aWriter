@@ -239,8 +239,9 @@ def read_draft_html(task_id: str):
 
 # ─── 메인 ────────────────────────────────────────────────────────────
 
-def main():
+def main(tistory_only: bool = False):
     from playwright.sync_api import sync_playwright
+    from agents.publisher_agent import is_logged_in, auto_login
     import shutil
 
     BROWSER_DATA_DIR = Path("browser_data")
@@ -249,43 +250,46 @@ def main():
     print("Repair — 빈 껍데기 공고 글 재수집 & 티스토리 수정")
     print("=" * 55)
 
-    # ── Step 1 & 2: 상세 수집 → task 업데이트 ──
-    task_supply = {}
-    for task_id, notice_id, list_type, house_secd in TARGETS:
-        task_path   = TASKS_DIR / f"{task_id}.md"
-        supply_type = ""
-        for line in task_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("supply_type:"):
-                supply_type = line.split(":", 1)[1].strip()
-                break
-        task_supply[task_id] = supply_type
+    if tistory_only:
+        # HTML이 이미 재생성된 경우 — 티스토리 수정만
+        success_ids = [t[0] for t in TARGETS if (DRAFT_DIR / f"{t[0]}.html").exists()]
+        print(f"--tistory-only: draft HTML {len(success_ids)}개 확인됨")
+    else:
+        # ── Step 1 & 2: 상세 수집 → task 업데이트 ──
+        for task_id, notice_id, list_type, house_secd in TARGETS:
+            task_path   = TASKS_DIR / f"{task_id}.md"
+            supply_type = ""
+            for line in task_path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("supply_type:"):
+                    supply_type = line.split(":", 1)[1].strip()
+                    break
 
-        print(f"\n[{task_id}] {notice_id} / {list_type}")
-        try:
-            fields = fetch_and_extract(notice_id, list_type, house_secd, supply_type)
-            if fields:
-                update_task_file(task_id, fields)
+            print(f"\n[{task_id}] {notice_id} / {list_type}")
+            try:
+                fields = fetch_and_extract(notice_id, list_type, house_secd, supply_type)
+                if fields:
+                    update_task_file(task_id, fields)
+                else:
+                    print(f"    ⚠️  필드 추출 실패, 스킵")
+            except Exception as e:
+                print(f"    ❌ 수집 오류: {e}")
+
+        # ── Step 3: HTML 재생성 ──
+        print("\n" + "=" * 55)
+        print("HTML 재생성 (writer --dry-run)")
+        print("=" * 55)
+        success_ids = []
+        for task_id, *_ in TARGETS:
+            print(f"\n[{task_id}]")
+            if regenerate_html(task_id):
+                success_ids.append(task_id)
+                print(f"    ✅ draft 생성 완료")
             else:
-                print(f"    ⚠️  필드 추출 실패, 스킵")
-        except Exception as e:
-            print(f"    ❌ 수집 오류: {e}")
+                print(f"    ❌ HTML 생성 실패")
 
-    # ── Step 3: HTML 재생성 ──
-    print("\n" + "=" * 55)
-    print("HTML 재생성 (writer --dry-run)")
-    print("=" * 55)
-    success_ids = []
-    for task_id, *_ in TARGETS:
-        print(f"\n[{task_id}]")
-        if regenerate_html(task_id):
-            success_ids.append(task_id)
-            print(f"    ✅ draft 생성 완료")
-        else:
-            print(f"    ❌ HTML 생성 실패")
-
-    if not success_ids:
-        print("❌ 재생성된 HTML 없음. 종료.")
-        return
+        if not success_ids:
+            print("❌ 재생성된 HTML 없음. 종료.")
+            return
 
     # ── Step 4: 티스토리 수정 ──
     print("\n" + "=" * 55)
@@ -300,13 +304,15 @@ def main():
         )
         page = context.new_page()
 
-        # 로그인 확인
+        # 로그인 확인 → 필요시 자동 로그인
         page.goto(f"{BLOG_URL}/manage", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
         if "login" in page.url or "/manage" not in page.url:
-            print("❌ 로그인 세션 만료. setup_browser.py를 먼저 실행하세요.")
-            context.close()
-            return
+            print("  세션 만료 → 자동 로그인 시도...")
+            if not auto_login(page, BLOG_URL):
+                print("❌ 자동 로그인 실패. setup_browser.py를 먼저 실행하세요.")
+                context.close()
+                return
 
         print("✅ 로그인 세션 확인")
 
@@ -316,7 +322,6 @@ def main():
             try:
                 ok = update_tistory_post(page, title, html)
                 if ok:
-                    # published HTML 갱신
                     shutil.copy(
                         str(DRAFT_DIR / f"{task_id}.html"),
                         str(PUB_DIR   / f"{task_id}.html"),
@@ -333,4 +338,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tistory-only", action="store_true", help="티스토리 수정만 실행 (HTML 재생성 스킵)")
+    args = ap.parse_args()
+    main(tistory_only=args.tistory_only)
