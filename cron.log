@@ -1879,3 +1879,53 @@ LH 청약플러스 서울/경기 공고 수집 중...
   스킵 (중복): e편한세상 분당 퍼스트빌리지(성남낙생 A-1BL) 신혼희망타운(공공분양) 입주자모집공고
   스킵 (중복): 화성동탄2 C-27블록 공공분양주택 입주자모집공고
 새 공고 없음 (모두 기존 Task 존재)
+[main 45b51a3] auto: 2026-06-08 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 10 insertions(+)
+  [청약홈/APT분양/경기] 1p: 1건
+  [청약홈/오피스텔/도시형/경기] 1p: 2건
+  [청약홈/APT잔여세대/서울] 1p: 3건
+  [청약홈/APT잔여세대/경기] 1p: 2건
+  [청약홈/APT잔여세대/인천] 1p: 2건
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+==================================================
+Planner Agent — llmenginehistory (청약홈)
+==================================================
+기존 처리 공고: 26건
+청약홈 서울/경기/인천 공고 수집 중...
+수집: 10건
+  스킵 (중복): 평택 고덕 우미 린 프레스티지(Abc-36BL)
+  상세+PDF 수집 중: [분양] 영통역 우미 린...
+    📄 PDF 2026950056 영통역 우미 린 입주자모집광고문.p (10000자)
+  📋 Task 생성: [분양/general] 영통역 우미 린
+  스킵 (중복): 풍무역 푸르지오 시티
+  상세+PDF 수집 중: [분양] 해링턴플레이스 노원 센트럴(2차)...
+    📄 PDF 2026910147 해링턴플레이스 노원 센트럴(2차)  (10000자)
+  📋 Task 생성: [분양/general] 해링턴플레이스 노원 센트럴(2차)
+  스킵 (중복): 청계 노르웨이숲(9차)
+  스킵 (중복): 화곡더리브스카이(3차)
+  상세+PDF 수집 중: [분양] 의왕고천지구 대방 디에트르 센트럴(B1BL)(2차)...
+    📄 PDF 2026910124 의왕고천지구 대방 디에트르 센트럴( (10000자)
+  📋 Task 생성: [분양/general] 의왕고천지구 대방 디에트르 센트럴(B1BL)(2차)
+  스킵 (중복): 더샵 분당센트로(2차)
+  스킵 (중복): 신검단중앙역 금강펜테리움 센트럴파크
+  스킵 (중복): 신검단중앙역 금강펜테리움 센트럴파크(3차)
+
+✅ 3개 Task 생성 완료
