@@ -116,6 +116,14 @@ def set_representative_image(page, post_id: int, img_bytes: bytes) -> bool:
         page.locator("button:has-text('완료'), button:has-text('발행')").first.click()
         page.wait_for_timeout(2000)
         page.locator(".ReactModal__Content.editor_layer").wait_for(state="visible", timeout=8000)
+        page.wait_for_timeout(1000)
+
+        # 이미 썸네일 있으면 삭제 버튼 클릭 → file input 복원
+        delete_btn = page.locator(".box_thumb .ico_delete")
+        if delete_btn.is_visible():
+            delete_btn.click()
+            page.wait_for_timeout(1000)
+
         page.locator(".box_thumb input[type='file']").set_input_files(tmp_path)
         page.wait_for_timeout(1500)
         page.locator("#open20").check(timeout=5000)
