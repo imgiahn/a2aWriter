@@ -72,11 +72,12 @@ def find_post_id(posts: list, notice_name: str, task_id: str) -> int:
     return 0
 
 
-def upload_pdf(post_id: int, pdf_path: str, pdf_filename: str, cookies: dict) -> bool:
+def upload_pdf_and_get_url(post_id: int, pdf_path: str, pdf_filename: str, cookies: dict) -> str:
+    """PDF 업로드 후 CDN URL 반환. 실패 시 빈 문자열."""
     pdf_file = Path(pdf_path)
     if not pdf_file.exists():
         print(f"  ⚠️  PDF 파일 없음: {pdf_path}")
-        return False
+        return ""
     url = f"{BLOG_URL}/manage/post/attach.json"
     headers = {
         "Referer": f"{BLOG_URL}/manage/newpost/{post_id}?type=post",
@@ -88,12 +89,67 @@ def upload_pdf(post_id: int, pdf_path: str, pdf_filename: str, cookies: dict) ->
     try:
         r = requests.post(url, files=files, cookies=cookies, headers=headers, timeout=60)
         if r.status_code == 200:
-            size = r.json().get("size", 0)
+            data = r.json()
+            cdn_url = data.get("url", "")
+            size = data.get("size", 0)
             print(f"  📎 PDF 업로드 완료: {pdf_filename} ({size:,} bytes)")
-            return True
+            return cdn_url
         print(f"  ⚠️  업로드 실패: HTTP {r.status_code}")
     except Exception as e:
         print(f"  ⚠️  업로드 오류: {e}")
+    return ""
+
+
+def append_pdf_link_to_post(post_id: int, post_title: str, pdf_url: str,
+                            pdf_filename: str, task_id: str, cookies: dict) -> bool:
+    """POST 본문 맨 끝에 PDF 다운로드 링크 추가 (PUT)."""
+    # 현재 본문 읽기
+    html = ""
+    for folder in ("published", "preview", "draft"):
+        p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
+        if p.exists():
+            html = re.sub(r"<!-- TITLE: .+? -->\n?", "",
+                          p.read_text(encoding="utf-8"), flags=re.DOTALL)
+            break
+
+    pdf_link_html = (
+        f'\n<hr style="margin:32px 0; border:none; border-top:1px solid #eee;">'
+        f'\n<p style="text-align:center; margin:16px 0;">'
+        f'<a href="{pdf_url}" target="_blank" rel="noopener" '
+        f'style="display:inline-block; padding:10px 20px; background:#2563eb; color:#fff; '
+        f'border-radius:6px; text-decoration:none; font-size:14px; font-weight:bold;">'
+        f'📄 공고문 원본 PDF 다운로드</a></p>\n'
+    )
+
+    # 이미 PDF 링크 있으면 스킵
+    if "공고문 원본 PDF" in html:
+        print(f"  ⏭️  이미 PDF 링크 있음")
+        return True
+
+    new_content = html + pdf_link_html
+    slogan = re.sub(r"\s+", "-", re.sub(r"[^\w\s가-힣]", "", post_title).strip())
+    payload = {
+        "id": str(post_id), "title": post_title, "content": new_content,
+        "slogan": slogan, "visibility": 20, "category": 0,
+        "tag": "", "acceptComment": 1, "published": 0,
+        "password": "", "uselessMarginForEntry": 1,
+        "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
+        "thumbnail": None, "type": "post", "attachments": [],
+        "recaptchaValue": "", "draftSequence": None, "totalWritingTimeMs": 3000,
+    }
+    hdrs = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Referer": f"{BLOG_URL}/manage/newpost/{post_id}?type=post",
+        "Origin": BLOG_URL,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    r = requests.put(f"{BLOG_URL}/manage/post/{post_id}.json",
+                     json=payload, cookies=cookies, headers=hdrs, timeout=20)
+    if r.status_code in (200, 201, 204):
+        print(f"  🔗 PDF 링크 본문 삽입 완료")
+        return True
+    print(f"  ⚠️  PUT 실패: HTTP {r.status_code}")
     return False
 
 
@@ -174,8 +230,11 @@ def main():
             skip += 1
             continue
 
+        post_title = next((p["title"] for p in posts if p["id"] == post_id), "")
         print(f"[{task_id}] 포스트 {post_id} — {pdf_filename}")
-        if upload_pdf(post_id, pdf_path, pdf_filename, cookies):
+        cdn_url = upload_pdf_and_get_url(post_id, pdf_path, pdf_filename, cookies)
+        if cdn_url:
+            append_pdf_link_to_post(post_id, post_title, cdn_url, pdf_filename, task_id, cookies)
             ok += 1
         else:
             skip += 1

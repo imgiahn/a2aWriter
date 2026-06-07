@@ -325,14 +325,10 @@ def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id
         print(f"  ⚠️  썸네일 PUT 실패: HTTP {resp.status_code}")
 
 
-def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Path):
-    """발행된 task의 PDF를 티스토리에 첨부파일로 업로드한다.
-
-    task 파일의 pdf_path + pdf_original_filename 필드를 읽어 업로드.
-    파일 없거나 필드 미설정 시 조용히 스킵.
-    업로드 엔드포인트: POST /manage/post/attach.json (multipart/form-data)
-    """
-    import requests as _req
+def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Path,
+                           post_id: int = 0, post_title: str = "", post_html: str = ""):
+    """발행된 task의 PDF를 티스토리에 업로드하고 본문 끝에 다운로드 링크를 삽입한다."""
+    import requests as _req, re as _re
 
     task_path = published_task_path
     if not task_path.exists():
@@ -355,7 +351,6 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
     if not pdf_file.exists():
         return
 
-    # pdf_original_filename 없으면 filename.txt 에서 읽거나 기본값 사용
     if not pdf_original_filename:
         filename_meta = pdf_file.parent / "filename.txt"
         if filename_meta.exists():
@@ -363,12 +358,11 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
     if not pdf_original_filename:
         pdf_original_filename = "공고문.pdf"
 
-    # 쿠키 추출
     cookies = {c["name"]: c["value"] for c in context.cookies() if "tistory" in c.get("domain", "")}
 
     upload_url = f"{blog_url}/manage/post/attach.json"
     headers = {
-        "Referer":          f"{blog_url}/manage/newpost/",
+        "Referer":          f"{blog_url}/manage/newpost/{post_id}" if post_id else f"{blog_url}/manage/newpost/",
         "Origin":           blog_url,
         "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "X-Requested-With": "XMLHttpRequest",
@@ -377,13 +371,52 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
 
     try:
         resp = _req.post(upload_url, files=files, cookies=cookies, headers=headers, timeout=60)
-        if resp.status_code == 200:
-            data = resp.json()
-            print(f"  📎 PDF 업로드 완료: {pdf_original_filename} ({data.get('size', 0):,} bytes)")
-        else:
+        if resp.status_code != 200:
             print(f"  ⚠️  PDF 업로드 실패: {resp.status_code}")
+            return
+        data = resp.json()
+        cdn_url = data.get("url", "")
+        print(f"  📎 PDF 업로드 완료: {pdf_original_filename} ({data.get('size', 0):,} bytes)")
+
+        # 본문 끝에 다운로드 링크 삽입
+        if not cdn_url or not post_id or not post_html:
+            return
+        if "공고문 원본 PDF" in post_html:
+            return
+        pdf_link = (
+            '\n<hr style="margin:32px 0; border:none; border-top:1px solid #eee;">'
+            f'\n<p style="text-align:center; margin:16px 0;">'
+            f'<a href="{cdn_url}" target="_blank" rel="noopener" '
+            f'style="display:inline-block; padding:10px 20px; background:#2563eb; color:#fff; '
+            f'border-radius:6px; text-decoration:none; font-size:14px; font-weight:bold;">'
+            f'📄 공고문 원본 PDF 다운로드</a></p>\n'
+        )
+        new_content = post_html + pdf_link
+        slogan = _re.sub(r"\s+", "-", _re.sub(r"[^\w\s가-힣]", "", post_title).strip())
+        payload = {
+            "id": str(post_id), "title": post_title, "content": new_content,
+            "slogan": slogan, "visibility": 20, "category": 0,
+            "tag": "", "acceptComment": 1, "published": 0,
+            "password": "", "uselessMarginForEntry": 1,
+            "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
+            "thumbnail": None, "type": "post", "attachments": [],
+            "recaptchaValue": "", "draftSequence": None, "totalWritingTimeMs": 3000,
+        }
+        put_hdrs = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "Referer": f"{blog_url}/manage/newpost/{post_id}?type=post",
+            "Origin": blog_url,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        r = _req.put(f"{blog_url}/manage/post/{post_id}.json",
+                     json=payload, cookies=cookies, headers=put_hdrs, timeout=20)
+        if r.status_code in (200, 201, 204):
+            print(f"  🔗 PDF 다운로드 링크 본문 삽입 완료")
+        else:
+            print(f"  ⚠️  링크 삽입 PUT 실패: {r.status_code}")
     except Exception as e:
-        print(f"  ⚠️  PDF 업로드 오류: {e}")
+        print(f"  ⚠️  PDF 처리 오류: {e}")
 
 
 def run(blog: str):
@@ -493,8 +526,11 @@ def run(blog: str):
 
             published_task = paths["tasks_published"] / task_file.name
 
-            # PDF 첨부파일 업로드
-            _upload_pdf_attachment(page, blog_url, context, published_task)
+            # PDF 첨부파일 업로드 + 본문 다운로드 링크 삽입
+            _upload_pdf_attachment(page, blog_url, context, published_task,
+                                   post_id=post_id or 0,
+                                   post_title=title,
+                                   post_html=publish_html)
         except Exception as e:
             shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
             print(f"❌ 발행 실패: {e} → tasks/failed/")
