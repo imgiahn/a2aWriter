@@ -172,7 +172,7 @@ def reauth(pw, blog_url: str) -> Optional[BrowserContext]:
         return None
 
 
-def post_article(page: Page, blog_url: str, title: str, content: str):
+def post_article(page: Page, blog_url: str, title: str, content: str, thumbnail_file: str = ""):
     page.goto(f"{blog_url}/manage/newpost/", timeout=20000)
     page.wait_for_load_state("networkidle", timeout=20000)
     page.wait_for_timeout(2000)
@@ -231,6 +231,17 @@ def post_article(page: Page, blog_url: str, title: str, content: str):
     modal.wait_for(state='visible', timeout=8000)
     page.locator('#open20').check(timeout=5000)
     page.wait_for_timeout(800)
+
+    # 대표이미지 설정 — .box_thumb input[type=file]에 파일 직접 업로드
+    if thumbnail_file:
+        try:
+            file_input = page.locator(".box_thumb input[type='file']")
+            file_input.set_input_files(thumbnail_file)
+            page.wait_for_timeout(1500)
+            print(f"  🖼️  대표이미지 업로드 완료")
+        except Exception as e:
+            print(f"  ⚠️  대표이미지 업로드 실패: {e}")
+
     page.evaluate("document.getElementById('publish-btn').click()")
     page.wait_for_timeout(3000)
 
@@ -417,7 +428,55 @@ def run(blog: str):
                     return
 
         try:
-            post_id = post_article(page, blog_url, title, html)
+            thumbnail_url = ""
+            publish_html = html
+
+            # llmenginehistory: 발행 전에 썸네일 생성
+            # → 임시 파일로 저장 (대표이미지 파일 업로드용)
+            # → CDN 업로드 후 html 앞에 삽입 (본문 상단 이미지용)
+            thumbnail_file = ""
+            if blog == "llmenginehistory":
+                import sys as _sys, os as _os, tempfile as _tmp
+                _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+                from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
+
+                task_meta = {}
+                for line in task_file.read_text(encoding="utf-8").splitlines():
+                    for key in ("notice_name", "region", "housing_category", "supply_type"):
+                        if line.startswith(f"{key}:"):
+                            task_meta[key] = line.split(":", 1)[1].strip()
+
+                print(f"  🎨 썸네일 생성 중...")
+                img_bytes = generate_thumbnail(task_meta)
+                if img_bytes:
+                    # 임시 파일 저장 (대표이미지 파일 업로드용)
+                    tmp = _tmp.NamedTemporaryFile(suffix=".png", delete=False)
+                    tmp.write(img_bytes)
+                    tmp.close()
+                    thumbnail_file = tmp.name
+
+                    # CDN 업로드 → 본문 상단 이미지 삽입
+                    cookies = {c["name"]: c["value"] for c in context.cookies()
+                               if "tistory" in c.get("domain", "")}
+                    cdn_url = upload_thumbnail_to_tistory(img_bytes, blog_url, cookies)
+                    if cdn_url:
+                        img_html = (
+                            f'<figure style="margin:0 0 16px 0; text-align:center;">'
+                            f'<img src="{cdn_url}" style="width:100%; max-width:800px; border-radius:8px;" '
+                            f'alt="{task_meta.get("notice_name", "")} 썸네일">'
+                            f'</figure>\n'
+                        )
+                        publish_html = img_html + html
+
+            post_id = post_article(page, blog_url, title, publish_html, thumbnail_file)
+
+            # 임시 파일 정리
+            if thumbnail_file:
+                try:
+                    import os as _os2
+                    _os2.unlink(thumbnail_file)
+                except Exception:
+                    pass
             shutil.move(str(task_file), str(paths["tasks_published"] / task_file.name))
             draft_src = paths["articles_draft"] / f"{task_id}.html"
             shutil.copy(str(draft_src), str(paths["articles_pub"] / f"{task_id}.html"))
@@ -425,10 +484,6 @@ def run(blog: str):
             print(f"✅ 발행 완료 → tasks/published/" + (f" (post_id={post_id})" if post_id else ""))
 
             published_task = paths["tasks_published"] / task_file.name
-
-            # 썸네일 생성 + 업로드 (llmenginehistory만, PDF 있는 공고)
-            if post_id and blog == "llmenginehistory":
-                _generate_and_set_thumbnail(blog_url, context, published_task, post_id, title)
 
             # PDF 첨부파일 업로드
             _upload_pdf_attachment(page, blog_url, context, published_task)
