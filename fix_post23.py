@@ -54,7 +54,7 @@ slogan = re.sub(r"[^\w\s가-힣]", "", title)
 slogan = re.sub(r"\s+", "-", slogan.strip())
 
 payload = {
-    "id": str(POST_ID), "title": title, "content": new_content,
+    "id": str(POST_ID), "title": title, "content": "",
     "slogan": "", "visibility": 20, "category": 0,
     "tag": "", "acceptComment": 1, "published": 0,
     "password": "", "uselessMarginForEntry": 1,
