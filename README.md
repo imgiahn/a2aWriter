@@ -1,35 +1,42 @@
-# a2aWriter — AI 편집국 자동 블로그 시스템
+# a2aWriter — AI 청약 인사이트 자동 발행 시스템
 
-> **편집장(사람) + AI Agent**가 함께 운영하는 블로그 자동화 시스템.  
-> Planner가 기획하고, Writer가 쓰고, Publisher가 발행한다.
+> **Planner → Writer → Publisher** 3개 Agent가 협업하는 AI 블로그 자동화 시스템.  
+> 서울/경기/인천 분양 청약 공고를 수집·해설하여 티스토리에 자동 발행한다.
+
+---
+
+## 운영 현황
+
+| 항목 | 내용 |
+|------|------|
+| 블로그 | [서울/경기 청약 인사이트](https://llmenginehistory.tistory.com) |
+| 수집 소스 | LH 청약플러스(분양 mi=1027) + 청약홈(APT분양·오피스텔·잔여세대) |
+| 대상 지역 | 서울 / 경기 / 인천 |
+| 발행 글 형식 | AI 썸네일 + PDF 다운로드 버튼 + 공고 해설 본문 |
+| EC2 서버 | 13.61.144.167 (Amazon Linux, Asia/Seoul KST) |
 
 ---
 
 ## 시스템 구조
 
 ```
-[편집장 (사람)]
-  └─ 시리즈 승인 → memory/decisions.md
-  └─ 성과 피드백 → memory/history.md
+[Planner Agent]  — agents/planner_agent.py
+  ├─ LH 청약플러스 / 청약홈 공고 수집 (Playwright + requests)
+  ├─ 중복 제거 후 Task 파일 생성
+  └─ → blogs/llmenginehistory/tasks/planned/*.md
 
-[Planner Agent]  → agents/planner_agent.py
-  └─ memory/*.md 분석
-  └─ 승인된 시리즈 기반 Task 생성
-  └─ → tasks/planned/*.md
+[Writer Agent]   — agents/writer_agent.py
+  ├─ planned Task 소비
+  ├─ Azure OpenAI로 HTML 해설 글 생성
+  └─ → articles/llmenginehistory/draft/{task_id}.html
 
-[Writer Agent]   → agents/writer_agent.py
-  └─ tasks/planned/*.md 소비
-  └─ Azure OpenAI로 글 생성
-  └─ → articles/draft/{task_id}.html
-  └─ → tasks/writing/ (이동)
-
-[Publisher Agent] → agents/publisher_agent.py
-  └─ articles/draft/*.html 발행
-  └─ Playwright로 티스토리 공개 발행
+[Publisher Agent] — agents/publisher_agent.py
+  ├─ AI 썸네일 생성 (gpt-image-2)
+  ├─ 발행 모달에서 대표이미지 설정
+  ├─ 티스토리 공개 발행 (Playwright)
+  ├─ PDF 공고문 업로드 + 본문 다운로드 버튼 삽입
   └─ → tasks/published/ (성공) | tasks/failed/ (실패)
 ```
-
-**절대 원칙:** Agent끼리 직접 대화하지 않는다. 모든 협업은 Task 파일을 통한다.
 
 ---
 
@@ -38,50 +45,59 @@
 ```
 a2aWriter/
 ├── agents/
-│   ├── planner_agent.py      # 기획 Agent (편집장 승인 기반 Task 생성)
-│   ├── writer_agent.py       # 작성 Agent (Task → 초안 HTML)
-│   └── publisher_agent.py    # 발행 Agent (초안 → 티스토리)
+│   ├── planner_agent.py      # 공고 수집 + Task 생성
+│   ├── writer_agent.py       # 해설 글 생성 (HTML)
+│   └── publisher_agent.py    # 티스토리 발행 + 썸네일 + PDF
 │
-├── memory/
-│   ├── history.md            # 장기 기억 (콘텐츠 반응 패턴)
-│   ├── decisions.md          # 편집장 승인 기록
-│   └── metrics.md            # 성과 데이터
+├── tools/
+│   ├── lh_scraper.py         # LH 청약플러스 스크래퍼 (분양만)
+│   ├── applyhome_scraper.py  # 청약홈 스크래퍼
+│   ├── pdf_parser.py         # PDF 파싱
+│   ├── thumbnail_gen.py      # gpt-image-2 썸네일 생성
+│   └── tistory_client.md     # 티스토리 연동 노하우 문서
 │
-├── tasks/
-│   ├── planned/              # 대기 중인 Task
-│   ├── writing/              # Writer 작업 중
-│   ├── published/            # 발행 완료
-│   └── failed/               # 발행 실패
+├── blogs/llmenginehistory/
+│   ├── config.md             # 블로그 설정 (URL 등)
+│   ├── writing_guide.md      # 작성 규칙
+│   ├── guides/
+│   │   ├── sale.md           # 공공분양 가이드
+│   │   └── general.md        # 일반 공고 가이드
+│   └── tasks/
+│       ├── planned/          # 발행 대기 Task
+│       ├── writing/          # Writer 처리 중
+│       ├── published/        # 발행 완료
+│       └── failed/           # 발행 실패
 │
-├── articles/
-│   ├── draft/                # 초안 HTML (git 미추적)
-│   └── published/            # 발행본 HTML (git 미추적)
+├── articles/llmenginehistory/
+│   ├── draft/                # Writer 초안 HTML (gitignore)
+│   ├── published/            # 발행본 HTML
+│   └── summary/              # 본문 요약 텍스트
 │
-├── writing_guide.md          # Writer 기본 작성 가이드
-└── .env.example              # 환경변수 템플릿
+├── data/                     # PDF 원본 + 썸네일 캐시 (gitignore)
+│   └── llmenginehistory/
+│       ├── notices/{id}/     # 공고별 PDF + filename.txt
+│       └── thumbnails/       # 생성된 썸네일 PNG 캐시
+│
+├── browser_data/             # Playwright 카카오 세션 쿠키 (gitignore)
+├── dashboard.py              # Flask 대시보드 (포트 5001)
+├── apply_thumbnails.py       # 기존 글 대표이미지 소급 적용
+├── apply_pdf_attachments.py  # 기존 글 PDF 소급 업로드
+└── .env                      # 환경변수 (gitignore)
 ```
 
 ---
 
-## Task 파일 형식
+## 크론탭 (EC2 서버)
 
-파일명: `tasks/planned/YYYYMMDD_NNN.md`
+```bash
+# LH 청약플러스 수집 — 매일 06시
+0 6 * * * cd ~/a2aWriter && source venv/bin/activate && python agents/planner_agent.py --blog llmenginehistory >> cron.log 2>&1 && bash git_sync.sh >> cron.log 2>&1
 
-```markdown
----
-task_id: 20260531_001
-status: planned
-topic: INTP ENFP 커플 궁합
-series: mbti_relationship
-priority: high
-template: relationship_v1
-created_by: planner_agent
-created_at: 2026-05-31
----
+# 청약홈 수집 — 매일 07시
+0 7 * * * cd ~/a2aWriter && source venv/bin/activate && python agents/planner_agent.py --blog llmenginehistory --source applyhome >> cron.log 2>&1 && bash git_sync.sh >> cron.log 2>&1
 
-# 기획 의도
-
-ENFP 관련 콘텐츠 반응 좋음. 권태기 주제로 확장.
+# Writer + Publisher — 매일 09~12시 (시간당 1개)
+0 9-12 * * * cd ~/a2aWriter && source venv/bin/activate && python agents/writer_agent.py --blog llmenginehistory >> cron.log 2>&1 && SERVER_MODE=1 python agents/publisher_agent.py --blog llmenginehistory >> cron.log 2>&1 && bash git_sync.sh >> cron.log 2>&1
 ```
 
 ---
@@ -90,70 +106,65 @@ ENFP 관련 콘텐츠 반응 좋음. 권태기 주제로 확장.
 
 ```bash
 # 환경 활성화
-source venv/bin/activate  # 서버
-venv\Scripts\activate     # 로컬 Windows
+source venv/bin/activate          # 서버 (Linux)
+venv\Scripts\activate             # 로컬 (Windows)
 
-# 1. Planner: Task 생성 (편집장 승인 후 planner_agent.py 내 approved_tasks 작성)
-python agents/planner_agent.py
+# 공고 수집 (Task 생성)
+python agents/planner_agent.py --blog llmenginehistory
+python agents/planner_agent.py --blog llmenginehistory --source applyhome
 
-# 2. Writer: 초안 생성
-python agents/writer_agent.py
+# 글 작성 (1건)
+python agents/writer_agent.py --blog llmenginehistory
 
-# 3. Publisher: 티스토리 발행
-SERVER_MODE=1 python agents/publisher_agent.py
+# 발행 (썸네일 + PDF 포함)
+SERVER_MODE=1 python agents/publisher_agent.py --blog llmenginehistory
+
+# 대시보드
+python dashboard.py   # http://localhost:5001
 ```
 
 ---
 
-## 서버 자동화
-
-**크론탭:** 매일 08:00 ~ 17:00 KST, 정각마다 Writer → Publisher 자동 실행
+## 발행 글 구조
 
 ```
-0 8-17 * * * cd ~/a2aWriter && source venv/bin/activate && python agents/writer_agent.py >> cron.log 2>&1 && SERVER_MODE=1 python agents/publisher_agent.py >> cron.log 2>&1
-```
-
-**서버 코드 업데이트:**
-```bash
-cd ~/a2aWriter && git pull
-```
-
-**쿠키 만료 시** 로컬에서 갱신 후 재업로드:
-```bash
-scp -i giahn.pem tistory_cookies.json ec2-user@13.61.144.167:~/a2aWriter/
+[썸네일 이미지]          ← gpt-image-2 생성, 대표이미지 자동 설정
+[PDF 다운로드 버튼]      ← 공고문 원본 PDF
+[기본 정보 표]
+[사업 개요]
+[분양가 + 평당가]
+[청약 조건 + 소득기준 표]
+[청약 일정 표]
 ```
 
 ---
 
-## 현재 상태 (2026-05-31 기준)
+## 카카오 세션 갱신 (만료 시)
 
-| 시리즈 | 전체 | 발행 완료 | 대기 중 |
-|--------|------|-----------|---------|
-| mbti_relationship | 120 | 63 | 58 |
-
----
-
-## 로드맵
-
-| 버전 | 내용 | 상태 |
-|------|------|------|
-| v1.0 | 작가 Agent — MBTI 120 조합 자동 발행 | ✅ 완료 |
-| v1.1 | EC2 서버 배포 + GitHub 연동 + 크론탭 | ✅ 완료 |
-| v2.0 | Agent-to-Agent 구조 설계 및 구현 | ✅ 완료 |
-| v2.1 | Planner Agent — 트렌드 기반 자동 기획 | 📋 예정 |
-| v2.2 | 성과 분석 → Planner 피드백 루프 | 📋 예정 |
-
----
-
-## 환경 설정
-
-```bash
-cp .env.example .env
-# .env 에 실제 키 입력
+```powershell
+# 로컬에서 실행
+cd C:\Users\user\Downloads\claude
+python setup_browser.py
+git add browser_data/ && git push
 ```
+
+---
+
+## 환경변수 (.env)
 
 | 변수 | 설명 |
 |------|------|
+| `KAKAO_EMAIL` | 카카오 로그인 이메일 |
+| `KAKAO_PASSWORD` | 카카오 비밀번호 |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI 엔드포인트 |
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI API 키 |
-| `AZURE_OPENAI_DEPLOYMENT_NAME` | 배포 모델명 |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | 텍스트 모델명 (gpt-5.4-mini 등) |
+
+---
+
+## 주의사항
+
+- **티스토리 무료 15개 제한**: 초과 시 임시저장됨
+- **임대 공고 수집 안 함**: LH mi=1026(임대) 완전 제외, 분양(mi=1027)만
+- **data/ gitignore**: PDF, 썸네일 캐시는 서버 로컬에만 존재
+- **browser_data/ gitignore**: 카카오 쿠키 포함, 공개 금지
