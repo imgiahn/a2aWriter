@@ -240,19 +240,34 @@ def post_article(page: Page, blog_url: str, title: str, content: str):
 
 
 def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id: int, title: str):
-    """썸네일 이미지 생성 → 티스토리 업로드 → PUT thumbnail 필드 설정."""
-    import requests as _req, re as _re, json as _json
+    """썸네일 이미지 생성 → 티스토리 업로드 → 포스트 내용 첫 번째 이미지로 삽입.
+
+    Tistory는 content 첫 번째 <img>를 og:image/썸네일로 자동 사용.
+    thumbnail 필드에도 동시 설정.
+    """
+    import requests as _req, re as _re
     import sys as _sys, os as _os
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
     from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
 
     # task 파일에서 필드 읽기
     task = {}
+    task_id = task_path.stem
     if task_path.exists():
         for line in task_path.read_text(encoding="utf-8").splitlines():
             for key in ("notice_name", "region", "housing_category", "supply_type"):
                 if line.startswith(f"{key}:"):
                     task[key] = line.split(":", 1)[1].strip()
+
+    # 현재 포스트 HTML 읽기 (published > draft 순서로 탐색)
+    blog = task_path.parts[-4]  # blogs/{blog}/tasks/published
+    post_html = ""
+    for folder in ("published", "draft", "preview"):
+        html_path = Path(f"articles/{blog}/{folder}/{task_id}.html")
+        if html_path.exists():
+            post_html = _re.sub(r"<!-- TITLE: .+? -->\n?", "",
+                                html_path.read_text(encoding="utf-8"), flags=_re.DOTALL)
+            break
 
     print(f"  🎨 썸네일 생성 중...")
     img_bytes = generate_thumbnail(task)
@@ -264,11 +279,19 @@ def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id
     if not cdn_url:
         return
 
-    # PUT으로 thumbnail 필드 설정
+    # 이미지를 포스트 내용 맨 앞에 삽입
+    img_html = (
+        f'<figure style="margin:0 0 16px 0; text-align:center;">'
+        f'<img src="{cdn_url}" style="width:100%; max-width:800px; border-radius:8px;" '
+        f'alt="{task.get("notice_name", "")} 썸네일">'
+        f'</figure>\n'
+    )
+    new_content = img_html + post_html
+
     slogan = _re.sub(r"[^\w\s가-힣]", "", title)
     slogan = _re.sub(r"\s+", "-", slogan.strip())
     payload = {
-        "id": str(post_id), "title": title, "content": "",
+        "id": str(post_id), "title": title, "content": new_content,
         "slogan": slogan, "visibility": 20, "category": 0,
         "tag": "", "acceptComment": 1, "published": 0,
         "password": "", "uselessMarginForEntry": 1,
@@ -286,7 +309,7 @@ def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id
     resp = _req.put(f"{blog_url}/manage/post/{post_id}.json",
                     json=payload, cookies=cookies, headers=hdrs, timeout=20)
     if resp.status_code in (200, 201, 204):
-        print(f"  ✅ 썸네일 설정 완료")
+        print(f"  ✅ 썸네일 이미지 삽입 완료 (첫 번째 이미지 → og:image 자동 설정)")
     else:
         print(f"  ⚠️  썸네일 PUT 실패: HTTP {resp.status_code}")
 

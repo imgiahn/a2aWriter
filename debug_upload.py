@@ -1,9 +1,12 @@
-"""포스트 24번 썸네일 테스트"""
-from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
-from agents.publisher_agent import auto_login
-from playwright.sync_api import sync_playwright
-import requests, re, json
+"""포스트 24번 썸네일 — 내용 첫 이미지로 삽입 테스트"""
+import os, base64, requests, re
 from pathlib import Path
+from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright
+from agents.publisher_agent import auto_login
+from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
+
+load_dotenv()
 
 BLOG_URL = "https://llmenginehistory.tistory.com"
 POST_ID  = 24
@@ -43,17 +46,26 @@ if not cdn_url:
     print("❌ 업로드 실패")
     exit(1)
 
-# 4. PUT thumbnail
-title = "🏠 풍무역 푸르지오 시티 오피스텔 신청 조건 총정리"
+# 4. 포스트 내용 앞에 이미지 삽입
+preview = Path("articles/llmenginehistory/preview/20260606_001.html")
+post_html = re.sub(r"<!-- TITLE: .+? -->\n?", "",
+                   preview.read_text(encoding="utf-8"), flags=re.DOTALL)
+
+img_html = (
+    f'<figure style="margin:0 0 16px 0; text-align:center;">'
+    f'<img src="{cdn_url}" style="width:100%; max-width:800px; border-radius:8px;" '
+    f'alt="풍무역 푸르지오 시티 썸네일">'
+    f'</figure>\n'
+)
+new_content = img_html + post_html
+print(f"content 길이: {len(new_content)}")
+
+# 5. PUT
+title  = "🏠 풍무역 푸르지오 시티 오피스텔 신청 조건 총정리"
 slogan = re.sub(r"[^\w\s가-힣]", "", title)
 slogan = re.sub(r"\s+", "-", slogan.strip())
-
-# 현재 포스트 내용 읽기
-preview = Path("articles/llmenginehistory/preview/20260606_001.html")
-content = re.sub(r"<!-- TITLE: .+? -->\n?", "", preview.read_text(encoding="utf-8"), flags=re.DOTALL)
-
 payload = {
-    "id": str(POST_ID), "title": title, "content": content,
+    "id": str(POST_ID), "title": title, "content": new_content,
     "slogan": slogan, "visibility": 20, "category": 0,
     "tag": "", "acceptComment": 1, "published": 0,
     "password": "", "uselessMarginForEntry": 1,
