@@ -319,8 +319,10 @@ def _get_cached_pdf(notice_id: str) -> bytes:
     return b""
 
 
-def _save_pdf_to_disk(notice_id: str, pdf_bytes: bytes) -> Optional[str]:
-    """PDF bytes를 data/llmenginehistory/notices/{notice_id}/original.pdf 로 저장한다."""
+def _save_pdf_to_disk(notice_id: str, pdf_bytes: bytes, pdf_filename: str = "") -> Optional[str]:
+    """PDF bytes를 data/llmenginehistory/notices/{notice_id}/original.pdf 로 저장한다.
+    원본 파일명은 filename.txt에 함께 저장 (publisher PDF 업로드 시 사용).
+    """
     if not pdf_bytes or not notice_id:
         return None
     folder = Path(f"data/llmenginehistory/notices/{notice_id}")
@@ -328,6 +330,8 @@ def _save_pdf_to_disk(notice_id: str, pdf_bytes: bytes) -> Optional[str]:
     pdf_path = folder / "original.pdf"
     if not pdf_path.exists():
         pdf_path.write_bytes(pdf_bytes)
+    if pdf_filename:
+        (folder / "filename.txt").write_text(pdf_filename, encoding="utf-8")
     return str(pdf_path)
 
 
@@ -512,7 +516,7 @@ def cheongyak_run(paths: dict):
         fields           = extract_notice_fields(combined, supply_type)
         qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
         scoring_text     = extract_scoring_text(pdf_bytes) if pdf_bytes else ""
-        pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes) or ""
+        pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes, pdf_orig_filename) or ""
         if qual_tables_html:
             print(f"    📊 소득기준 표 추출 완료")
         if scoring_text:
@@ -611,7 +615,7 @@ def applyhome_run(paths: dict):
         fields           = extract_notice_fields(combined, supply_type)
         qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
         scoring_text     = extract_scoring_text(pdf_bytes) if pdf_bytes else ""
-        pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes) or ""
+        pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes, pdf_orig_filename) or ""
 
         if qual_tables_html:
             print(f"    📊 소득기준 표 추출 완료")
@@ -690,7 +694,7 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
     fields           = extract_notice_fields(combined, supply_type)
     qual_tables_html = extract_qualification_tables(pdf_bytes) if pdf_bytes else ""
     scoring_text     = extract_scoring_text(pdf_bytes) if pdf_bytes else ""
-    pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes) or ""
+    pdf_disk_path    = _save_pdf_to_disk(notice_id, pdf_bytes, detail.get("pdf_filename", "")) or ""
     if qual_tables_html:
         print(f"  📊 소득기준 표 추출 완료")
     if scoring_text:

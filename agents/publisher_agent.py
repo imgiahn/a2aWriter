@@ -347,13 +347,21 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
         elif line.startswith("pdf_original_filename:"):
             pdf_original_filename = line.split(":", 1)[1].strip()
 
-    if not pdf_path or not pdf_original_filename:
+    if not pdf_path:
         return
 
     from pathlib import Path as _Path
     pdf_file = _Path(pdf_path)
     if not pdf_file.exists():
         return
+
+    # pdf_original_filename 없으면 filename.txt 에서 읽거나 기본값 사용
+    if not pdf_original_filename:
+        filename_meta = pdf_file.parent / "filename.txt"
+        if filename_meta.exists():
+            pdf_original_filename = filename_meta.read_text(encoding="utf-8").strip()
+    if not pdf_original_filename:
+        pdf_original_filename = "공고문.pdf"
 
     # 쿠키 추출
     cookies = {c["name"]: c["value"] for c in context.cookies() if "tistory" in c.get("domain", "")}
