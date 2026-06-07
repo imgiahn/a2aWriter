@@ -1833,3 +1833,21 @@ After doing this, you may fix the identity used for this commit with:
  create mode 100644 articles/mbtireallove/published/20260531_052.html
  create mode 100644 articles/mbtireallove/summary/20260531_052.txt
  rename blogs/mbtireallove/tasks/{planned => published}/20260531_052.md (100%)
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260531_053 — INTP ISFP 커플 궁합
+  글 생성 중...
+  제목: INTP ISFP 커플 궁합 – 말보다 분위기, 논리보다 감각… INTP ISFP 커플의 묘한 끌림
+  초안 저장: articles/mbtireallove/draft/20260531_053.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260531_053
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260531_053
+제목: INTP ISFP 커플 궁합 – 말보다 분위기, 논리보다 감각… INTP ISFP 커플의 묘한 끌림
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
