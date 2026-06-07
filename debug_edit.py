@@ -1,4 +1,4 @@
-"""textarea 직접 수정 + 스크린샷으로 에디터 상태 확인"""
+"""tinyMCE selection.setContent + execCommand 방식 테스트"""
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
 from pathlib import Path
@@ -24,60 +24,43 @@ with sync_playwright() as pw:
     page.goto(edit_url, timeout=20000, wait_until="networkidle")
     page.wait_for_timeout(3000)
 
-    # 스크린샷
-    page.screenshot(path="/tmp/editor_state.png")
-    print("스크린샷 저장됨")
-
     page.wait_for_function("typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null", timeout=12000)
     page.wait_for_timeout(1000)
 
-    # tinyMCE 연결 textarea + 모든 텍스트 영역 확인
-    info = page.evaluate("""(html) => {
+    # 방법 A: selection.select(body) + selection.setContent
+    result_a = page.evaluate("""(html) => {
         const ed = tinyMCE.activeEditor;
-        const results = {};
-
-        // tinyMCE가 연결된 textarea
-        const targetId = ed ? ed.id : null;
-        results.editorId = targetId;
-        results.editorElType = targetId ? (document.getElementById(targetId) ? document.getElementById(targetId).tagName : 'notfound') : 'none';
-
-        // 모든 textarea
-        const tas = Array.from(document.querySelectorAll('textarea'));
-        results.textareas = tas.map(ta => ({
-            id: ta.id, name: ta.name, len: ta.value.length
-        }));
-
-        // textarea에 직접 설정 시도
-        const ta = document.getElementById(targetId);
-        if (ta) {
-            ta.value = html;
-            // React/Vue 상태 업데이트 트리거
-            const evt = new Event('input', {bubbles: true});
-            ta.dispatchEvent(evt);
-            results.taSet = ta.value.length;
-        }
-
-        // tinyMCE에도 알림
-        if (ed) {
-            ed.setContent(html);
+        try {
+            ed.selection.select(ed.getBody(), true);
+            ed.selection.setContent(html);
             ed.save();
-            results.edContent = ed.getContent().length;
-        }
-
-        return results;
+            return 'A:' + ed.getContent().length;
+        } catch(e) { return 'A_err:' + e.message; }
     }""", html)
-    print("tinyMCE 에디터 ID:", info.get("editorId"))
-    print("연결 element 타입:", info.get("editorElType"))
-    print("Textarea들:", info.get("textareas"))
-    print("textarea 설정 결과:", info.get("taSet"))
-    print("tinyMCE getContent 길이:", info.get("edContent"))
+    print("방법 A:", result_a)
 
-    page.wait_for_timeout(500)
+    after_a = page.evaluate("() => tinyMCE.activeEditor.getContent().substring(0, 120)")
+    print("A 후 내용 앞120:", after_a)
+    changed = "분양가" in after_a or "64A" in after_a or "2026.06.08" in after_a
+    print("내용 변경됨:", changed)
+
+    if not changed:
+        # 방법 B: unnamed textarea (2206자) React native setter
+        result_b = page.evaluate("""(html) => {
+            const tas = Array.from(document.querySelectorAll('textarea'));
+            const ta = tas.find(t => !t.id && t.value.length > 100);
+            if (!ta) return 'B: textarea not found';
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+            setter.call(ta, html);
+            ta.dispatchEvent(new Event('input', {bubbles: true}));
+            ta.dispatchEvent(new Event('change', {bubbles: true}));
+            return 'B:' + ta.value.length;
+        }""", html)
+        print("방법 B:", result_b)
 
     # 완료 → 발행
     page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
     page.wait_for_timeout(3000)
-    page.screenshot(path="/tmp/after_complete.png")
 
     modal = page.locator(".ReactModal__Content.editor_layer")
     try:
@@ -92,7 +75,6 @@ with sync_playwright() as pw:
 
     ctx.close()
 
-# 검증
 time.sleep(3)
 r = requests.get("https://llmenginehistory.tistory.com/24",
                  headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
@@ -100,7 +82,7 @@ m2 = re.search(r'class="tt_article_useless_p_margin[^"]*">(.*?)<div class="conta
 if m2:
     text = re.sub(r"<[^>]+>", " ", m2.group(1))
     text = re.sub(r"\s+", " ", text).strip()
-    if "분양가" in text and "64A" in text:
-        print("✅ 수정 확인됨!")
+    if "분양가" in text or "64A" in text:
+        print("✅ 수정 확인됨! 앞300:", text[:300])
     else:
         print("❌ 아직 구버전:", text[:200])
