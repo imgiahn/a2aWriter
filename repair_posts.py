@@ -176,49 +176,50 @@ def find_post_edit_url(page, title: str) -> str:
 
 
 def update_tistory_post(page, title: str, html: str) -> bool:
+    """PUT /manage/post/{id}.json API 인터셉터로 content 교체 후 발행."""
     edit_url = find_post_edit_url(page, title)
     if not edit_url:
         print(f"    ⚠️  포스트 편집 URL 못 찾음: {title[:20]}")
         return False
 
-    print(f"    편집 URL: {edit_url}")
+    # 포스트 ID 추출
+    m = re.search(r"/manage/post/(\d+)", edit_url)
+    if not m:
+        print(f"    ⚠️  포스트 ID 추출 실패: {edit_url}")
+        return False
+    post_id = m.group(1)
+    print(f"    편집 URL: {edit_url} (ID={post_id})")
+
+    import json as _json
+
+    # PUT 요청을 가로채서 content를 새 HTML로 교체
+    new_html_ref = {"html": html, "intercepted": False}
+
+    def intercept_put(route, request):
+        if request.method == "PUT" and f"/manage/post/{post_id}.json" in request.url:
+            try:
+                body = _json.loads(request.post_data or "{}")
+                body["content"] = new_html_ref["html"]
+                new_html_ref["intercepted"] = True
+                route.continue_(post_data=_json.dumps(body))
+            except Exception as e:
+                print(f"    ⚠️  인터셉트 오류: {e}")
+                route.continue_()
+        else:
+            route.continue_()
+
+    page.route(f"**/{post_id}.json", intercept_put)
+
     page.goto(edit_url, timeout=20000, wait_until="networkidle")
     page.wait_for_timeout(2000)
 
-    # tinyMCE로 내용 교체
     page.wait_for_function(
         "typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor !== null",
         timeout=10000,
     )
-    injected = page.evaluate(
-        """(html) => {
-            try {
-                const ed = tinyMCE.activeEditor;
-                if (!ed) return false;
-                ed.focus(); ed.setContent(html); ed.save();
-                return true;
-            } catch(e) { return false; }
-        }""",
-        html,
-    )
-    if not injected:
-        print(f"    ⚠️  tinyMCE 삽입 실패, HTML 모드 시도")
-        page.locator("li:has-text('HTML'), button:has-text('HTML')").first.click()
-        page.wait_for_timeout(1000)
-        done = page.evaluate(
-            """(html) => {
-                const cm = document.querySelector('.CodeMirror');
-                if (cm && cm.CodeMirror) { cm.CodeMirror.setValue(html); return true; }
-                return false;
-            }""",
-            html,
-        )
-        if not done:
-            return False
-
     page.wait_for_timeout(500)
 
-    # 완료 → 발행 버튼
+    # 완료 → 발행 버튼 (내용 수정 없이 — 인터셉터가 교체)
     page.locator("button:has-text('완료'), button:has-text('발행'), .btn_publish").first.click()
     page.wait_for_timeout(2000)
 
@@ -228,12 +229,17 @@ def update_tistory_post(page, title: str, html: str) -> bool:
         page.locator('#open20').check(timeout=5000)
         page.wait_for_timeout(800)
         page.evaluate("document.getElementById('publish-btn').click()")
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(4000)
     except Exception:
-        # 모달 없으면 이미 저장됨
-        page.locator("button:has-text('저장'), button:has-text('완료')").first.click(timeout=5000)
         page.wait_for_timeout(2000)
 
+    page.unroute(f"**/{post_id}.json")
+
+    if not new_html_ref["intercepted"]:
+        print(f"    ⚠️  PUT 인터셉트 안됨")
+        return False
+
+    print(f"    ✅ PUT 인터셉트 성공")
     return True
 
 
