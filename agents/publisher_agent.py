@@ -234,6 +234,62 @@ def post_article(page: Page, blog_url: str, title: str, content: str):
     page.evaluate("document.getElementById('publish-btn').click()")
     page.wait_for_timeout(3000)
 
+    # 발행 후 URL에서 post_id 추출
+    m = re.search(r"/(\d+)$", page.url)
+    return int(m.group(1)) if m else None
+
+
+def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id: int, title: str):
+    """썸네일 이미지 생성 → 티스토리 업로드 → PUT thumbnail 필드 설정."""
+    import requests as _req, re as _re, json as _json
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
+
+    # task 파일에서 필드 읽기
+    task = {}
+    if task_path.exists():
+        for line in task_path.read_text(encoding="utf-8").splitlines():
+            for key in ("notice_name", "region", "housing_category", "supply_type"):
+                if line.startswith(f"{key}:"):
+                    task[key] = line.split(":", 1)[1].strip()
+
+    print(f"  🎨 썸네일 생성 중...")
+    img_bytes = generate_thumbnail(task)
+    if not img_bytes:
+        return
+
+    cookies = {c["name"]: c["value"] for c in context.cookies() if "tistory" in c.get("domain", "")}
+    cdn_url = upload_thumbnail_to_tistory(img_bytes, blog_url, cookies)
+    if not cdn_url:
+        return
+
+    # PUT으로 thumbnail 필드 설정
+    slogan = _re.sub(r"[^\w\s가-힣]", "", title)
+    slogan = _re.sub(r"\s+", "-", slogan.strip())
+    payload = {
+        "id": str(post_id), "title": title, "content": "",
+        "slogan": slogan, "visibility": 20, "category": 0,
+        "tag": "", "acceptComment": 1, "published": 0,
+        "password": "", "uselessMarginForEntry": 1,
+        "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
+        "thumbnail": cdn_url, "type": "post", "attachments": [],
+        "recaptchaValue": "", "draftSequence": None, "totalWritingTimeMs": 3000,
+    }
+    hdrs = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Referer": f"{blog_url}/manage/newpost/{post_id}?type=post",
+        "Origin": blog_url,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    resp = _req.put(f"{blog_url}/manage/post/{post_id}.json",
+                    json=payload, cookies=cookies, headers=hdrs, timeout=20)
+    if resp.status_code in (200, 201, 204):
+        print(f"  ✅ 썸네일 설정 완료")
+    else:
+        print(f"  ⚠️  썸네일 PUT 실패: HTTP {resp.status_code}")
+
 
 def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Path):
     """발행된 task의 PDF를 티스토리에 첨부파일로 업로드한다.
@@ -338,15 +394,21 @@ def run(blog: str):
                     return
 
         try:
-            post_article(page, blog_url, title, html)
+            post_id = post_article(page, blog_url, title, html)
             shutil.move(str(task_file), str(paths["tasks_published"] / task_file.name))
             draft_src = paths["articles_draft"] / f"{task_id}.html"
             shutil.copy(str(draft_src), str(paths["articles_pub"] / f"{task_id}.html"))
             save_summary(task_id, html, paths["articles_summary"])
-            print(f"✅ 발행 완료 → tasks/published/")
+            print(f"✅ 발행 완료 → tasks/published/" + (f" (post_id={post_id})" if post_id else ""))
 
-            # PDF 첨부파일 업로드 (pdf_path + pdf_original_filename이 있는 경우)
-            _upload_pdf_attachment(page, blog_url, context, paths["tasks_published"] / task_file.name)
+            published_task = paths["tasks_published"] / task_file.name
+
+            # 썸네일 생성 + 업로드 (llmenginehistory만, PDF 있는 공고)
+            if post_id and blog == "llmenginehistory":
+                _generate_and_set_thumbnail(blog_url, context, published_task, post_id, title)
+
+            # PDF 첨부파일 업로드
+            _upload_pdf_attachment(page, blog_url, context, published_task)
         except Exception as e:
             shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
             print(f"❌ 발행 실패: {e} → tasks/failed/")

@@ -184,7 +184,21 @@ page.route("**/24.json", handler)
 
 ---
 
-## 8. 환경변수
+## 8. 썸네일 생성
+
+- **모델**: `gpt-image-2` (Azure OpenAI, `2025-04-01-preview`)
+- **엔드포인트**: `POST {AZURE_OPENAI_ENDPOINT}/openai/deployments/gpt-image-2/images/generations`
+- **응답**: `data[0].b64_json` → base64 decode → PNG bytes
+- **업로드**: `attach.json` (image/png mimetype, 동일 엔드포인트)
+- **PUT thumbnail 필드**: 전체 CDN URL 문자열 → HTTP 200 확인됨
+- **구현**: `tools/thumbnail_gen.py` → `generate_thumbnail(task)` / `upload_thumbnail_to_tistory()`
+
+```python
+# 썸네일 PUT 예시
+payload["thumbnail"] = "https://blog.kakaocdn.net/dna/KEY/img.png?credential=..."
+```
+
+## 9. 환경변수
 
 ```
 KAKAO_EMAIL=...      # 카카오 로그인 이메일
