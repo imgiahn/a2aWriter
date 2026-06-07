@@ -21,8 +21,7 @@ REGION_KEYWORDS = ["서울", "경기"]
 
 # 목록 유형별 설정: (URL, mi값, housing_source, priority)
 LIST_PAGES = [
-    (LH_SALE_URL,   "1027", "분양", "high"),    # 분양 우선
-    (LH_RENTAL_URL, "1026", "임대", "medium"),
+    (LH_SALE_URL, "1027", "분양", "high"),    # 분양만 수집 (임대 mi=1026 제외)
 ]
 
 

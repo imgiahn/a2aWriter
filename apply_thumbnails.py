@@ -2,9 +2,11 @@
 apply_thumbnails.py — 기존 발행 글에 AI 썸네일 일괄 적용
 
 gpt-image-2로 각 공고 썸네일 생성 → content 첫 번째 이미지로 삽입 → og:image 자동 설정
+Tistory 실제 포스트 내용 확인 → 이미 썸네일 있으면 자동 스킵
 """
 
 import re
+import time
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
@@ -18,9 +20,6 @@ BLOG      = "llmenginehistory"
 BLOG_URL  = "https://llmenginehistory.tistory.com"
 TASKS_DIR = Path(f"blogs/{BLOG}/tasks/published")
 
-# 이미 처리한 포스트 (스킵)
-SKIP_POST_IDS = {24}
-
 
 def parse_task(path: Path) -> dict:
     result = {}
@@ -33,7 +32,23 @@ def parse_task(path: Path) -> dict:
     return result
 
 
-def find_post_id(posts: list, notice_name: str) -> int:
+def find_post_id(posts: list, notice_name: str, task_id: str = "") -> int:
+    # 1) published HTML 제목으로 매칭 (가장 정확)
+    if task_id:
+        pub_title = get_published_title(task_id)
+        if pub_title:
+            clean_pub = re.sub(r"^[🏠\s]+", "", pub_title).strip()
+            for p in posts:
+                p_clean = re.sub(r"^[🏠\s]+", "", p["title"]).strip()
+                if p_clean == clean_pub:
+                    return p["id"]
+            # 앞 15자 부분 매칭
+            for p in posts:
+                p_clean = re.sub(r"^[🏠\s]+", "", p["title"]).strip()
+                if clean_pub[:15] and p_clean[:15] == clean_pub[:15]:
+                    return p["id"]
+
+    # 2) notice_name 키워드 매칭 (폴백)
     clean = re.sub(r"\([^)]*\)", "", notice_name)
     clean = re.sub(r"\[[^\]]*\]", "", clean)
     clean = re.sub(r"\s+", "", clean.strip())
@@ -47,13 +62,35 @@ def find_post_id(posts: list, notice_name: str) -> int:
     return 0
 
 
-def get_post_html(task_id: str) -> str:
-    """기존 발행 HTML 읽기 (published > preview > draft 순)."""
+def get_published_title(task_id: str) -> str:
     for folder in ("published", "preview", "draft"):
         p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
         if p.exists():
-            return re.sub(r"<!-- TITLE: .+? -->\n?", "",
+            m = re.match(r"<!-- TITLE: (.+?) -->", p.read_text(encoding="utf-8"))
+            return m.group(1).strip() if m else ""
+    return ""
+
+
+def local_has_thumbnail(task_id: str) -> bool:
+    """로컬 published HTML이 <figure>로 시작하면 썸네일 적용된 것으로 판단."""
+    p = Path(f"articles/{BLOG}/published/{task_id}.html")
+    if not p.exists():
+        return False
+    body = re.sub(r"<!-- TITLE: .+? -->\n?", "",
+                  p.read_text(encoding="utf-8"), flags=re.DOTALL).lstrip()
+    return body.startswith("<figure")
+
+
+def get_post_html(task_id: str) -> str:
+    """기존 발행 HTML 읽기. 앞에 붙은 <figure> 썸네일은 모두 제거 (중복 방지)."""
+    for folder in ("published", "preview", "draft"):
+        p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
+        if p.exists():
+            html = re.sub(r"<!-- TITLE: .+? -->\n?", "",
                           p.read_text(encoding="utf-8"), flags=re.DOTALL)
+            # 앞부분 <figure>...</figure> 블록 전부 제거 (중복 썸네일 제거)
+            html = re.sub(r"^\s*(<figure[^>]*>.*?</figure>\s*)+", "", html, flags=re.DOTALL)
+            return html
     return ""
 
 
@@ -62,17 +99,14 @@ def apply_thumbnail(post_id: int, post_title: str, task: dict,
     task_id   = task["task_id"]
     post_html = get_post_html(task_id)
 
-    # 이미지 생성
     img_bytes = generate_thumbnail(task)
     if not img_bytes:
         return False
 
-    # 업로드
     cdn_url = upload_thumbnail_to_tistory(img_bytes, BLOG_URL, cookies)
     if not cdn_url:
         return False
 
-    # content 앞에 이미지 삽입
     img_html = (
         f'<figure style="margin:0 0 16px 0; text-align:center;">'
         f'<img src="{cdn_url}" style="width:100%; max-width:800px; border-radius:8px;" '
@@ -108,20 +142,18 @@ def main():
     print("기존 발행 글 AI 썸네일 일괄 적용")
     print("=" * 55)
 
-    # task 수집
     targets = []
     for tf in sorted(TASKS_DIR.glob("*.md")):
-        if tf.stem.startswith("test_"):
+        if tf.stem.startswith("test_") or tf.stem == ".gitkeep":
             continue
         targets.append(parse_task(tf))
 
-    # 단일 Playwright 세션
     posts = []
     cookies = {}
     with sync_playwright() as pw:
         ctx = pw.chromium.launch_persistent_context(
             user_data_dir="browser_data", headless=True,
-            args=["--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
         page = ctx.new_page()
 
         page.goto(f"{BLOG_URL}/manage", timeout=15000, wait_until="networkidle")
@@ -167,24 +199,29 @@ def main():
 
     print(f"\n쿠키 {len(cookies)}개 | 썸네일 적용 시작\n" + "=" * 55)
 
+    # 강제 재처리 목록 (중복 썸네일 수동 정리 시 사용, 평소엔 비워둠)
+    force_fix_ids: set = set()
+
     ok = skip = 0
     for t in targets:
         notice_name = t.get("notice_name", "")
         task_id     = t["task_id"]
 
-        post_id = find_post_id(posts, notice_name)
+        post_id = find_post_id(posts, notice_name, task_id)
         if not post_id:
             print(f"[{task_id}] ⚠️  포스트 못 찾음: {notice_name[:30]}")
             skip += 1
             continue
 
-        if post_id in SKIP_POST_IDS:
-            print(f"[{task_id}] ⏭️  스킵 (이미 처리): 포스트 {post_id}")
-            skip += 1
-            continue
-
         post_title = next((p["title"] for p in posts if p["id"] == post_id), notice_name)
         print(f"\n[{task_id}] 포스트 {post_id} — {notice_name[:30]}")
+
+        # 로컬 HTML 확인 → 이미 단일 썸네일 적용 완료면 스킵
+        # (로컬 HTML은 apply_thumbnail이 갱신하므로 가장 신뢰할 수 있는 상태)
+        if local_has_thumbnail(task_id) and not task_id in force_fix_ids:
+            print(f"  ⏭️  이미 썸네일 있음 — 스킵")
+            skip += 1
+            continue
 
         if apply_thumbnail(post_id, post_title, t, cookies):
             print(f"  ✅ 완료")
@@ -192,6 +229,8 @@ def main():
         else:
             print(f"  ❌ 실패")
             skip += 1
+
+        time.sleep(2)
 
     print(f"\n✅ 완료 — 성공 {ok}개 / 실패·스킵 {skip}개")
 
