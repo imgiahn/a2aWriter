@@ -2061,3 +2061,24 @@ Task: 20260531_055
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main 548a318] auto: 2026-06-08 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 5 files changed, 109 insertions(+)
+ create mode 100644 articles/mbtireallove/published/20260531_055.html
+ create mode 100644 articles/mbtireallove/summary/20260531_055.txt
+ rename blogs/llmenginehistory/tasks/{planned => writing}/20260606_010.md (100%)
+ rename blogs/mbtireallove/tasks/{planned => published}/20260531_055.md (100%)
+  🖼️  대표이미지 업로드 완료
+✅ 발행 완료 → tasks/published/
