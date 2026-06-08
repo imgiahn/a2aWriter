@@ -98,15 +98,17 @@ def set_representative_image(page, post_id: int, img_bytes: bytes) -> bool:
             delete_btn.click()
             page.wait_for_timeout(1000)
 
-        page.locator(".box_thumb input[type='file']").set_input_files(tmp_path)
+        # .inner_box 클릭으로 파일 선택창 열기 (React 상태 정상 업데이트)
+        with page.expect_file_chooser() as fc_info:
+            page.locator(".box_thumb .inner_box").click()
+        fc_info.value.set_files(tmp_path)
         page.wait_for_timeout(2000)
         try:
             page.locator("#open20").check(timeout=3000)
             page.wait_for_timeout(500)
         except Exception:
             pass
-        # "공개 발행" 버튼 클릭 (publish-btn ID 없음)
-        page.locator("button:has-text('공개 발행')").click(timeout=5000)
+        page.locator("#publish-btn").click(timeout=5000)
         page.wait_for_timeout(3000)
         return True
     except Exception as e:
