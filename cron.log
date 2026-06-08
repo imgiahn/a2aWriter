@@ -2005,3 +2005,59 @@ Task: 20260606_009
   🖼️  썸네일 업로드 완료
   🖼️  대표이미지 업로드 완료
 ✅ 발행 완료 → tasks/published/
+[main 79d2138] auto: 2026-06-08 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 4 files changed, 81 insertions(+)
+ create mode 100644 articles/llmenginehistory/published/20260606_009.html
+ create mode 100644 articles/llmenginehistory/summary/20260606_009.txt
+ rename blogs/llmenginehistory/tasks/{planned => published}/20260606_009.md (100%)
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260606_010 — 연수 월드메르디앙 어반포레(2차) 공고 해설
+  글 생성 중...
+  제목: 🏠 연수 월드메르디앙 어반포레 임의공급 신청 조건
+  초안 저장: articles/llmenginehistory/draft/20260606_010.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260606_010
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260531_055 — INTP ISTP 커플 궁합
+  글 생성 중...
+  제목: INTP ISTP 커플 궁합 – 말보다 행동, 조용한 두 천재의 연애 밸런스
+  초안 저장: articles/mbtireallove/draft/20260531_055.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260531_055
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260606_010
+제목: 🏠 연수 월드메르디앙 어반포레 임의공급 신청 조건
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+  🎨 썸네일 생성 중...
+  🎨 썸네일 생성 완료 (gpt-image-2, 1,650,404 bytes)
+  🖼️  썸네일 업로드 완료
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260531_055
+제목: INTP ISTP 커플 궁합 – 말보다 행동, 조용한 두 천재의 연애 밸런스
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
