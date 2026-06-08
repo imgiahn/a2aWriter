@@ -99,10 +99,14 @@ def set_representative_image(page, post_id: int, img_bytes: bytes) -> bool:
             page.wait_for_timeout(1000)
 
         page.locator(".box_thumb input[type='file']").set_input_files(tmp_path)
-        page.wait_for_timeout(1500)
-        page.locator("#open20").check(timeout=5000)
-        page.wait_for_timeout(500)
-        page.evaluate("document.getElementById('publish-btn').click()")
+        page.wait_for_timeout(2000)
+        try:
+            page.locator("#open20").check(timeout=3000)
+            page.wait_for_timeout(500)
+        except Exception:
+            pass
+        # "공개 발행" 버튼 클릭 (publish-btn ID 없음)
+        page.locator("button:has-text('공개 발행')").click(timeout=5000)
         page.wait_for_timeout(3000)
         return True
     except Exception as e:
