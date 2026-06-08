@@ -535,6 +535,10 @@ def cheongyak_run(paths: dict):
             pdf_original_filename=pdf_orig_filename,
         )
         print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
+        if notice_id:
+            existing_ids.add(notice_id)
+        if notice_name:
+            existing_ids.add(notice_name)
         created += 1
 
     if created == 0:
@@ -638,6 +642,10 @@ def applyhome_run(paths: dict):
             pdf_original_filename=pdf_orig_filename,
         )
         print(f"  📋 Task 생성: [{housing_source}/{category}] {notice_name[:30]}")
+        if notice_id:
+            existing_ids.add(notice_id)
+        if notice_name:
+            existing_ids.add(notice_name)
         created += 1
 
     if created == 0:
