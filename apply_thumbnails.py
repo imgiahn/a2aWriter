@@ -206,6 +206,21 @@ def main():
 
     print(f"\n완료 — 성공 {ok}개 / 실패·스킵 {skip}개")
 
+    if ok > 0:
+        _run_pdf_restore()
+
+
+def _run_pdf_restore():
+    import subprocess, sys
+    print("\n🔄 재발행으로 날아간 PDF 링크 자동복원 중...")
+    result = subprocess.run(
+        [sys.executable, "apply_pdf_attachments.py"],
+        capture_output=True, text=True
+    )
+    print(result.stdout)
+    if result.returncode != 0:
+        print(f"  ⚠️  PDF 복원 오류: {result.stderr[:300]}")
+
 
 if __name__ == "__main__":
     main()
