@@ -1,24 +1,21 @@
 """
-apply_thumbnails.py — 기존 발행 글에 대표이미지 소급 적용
+apply_thumbnails.py — 기존 발행 글에 대표이미지 소급 적용 (PUT API 방식)
 
-우선순위:
-1. data/thumbnails/{task_id}.png 로컬 캐시 사용
-2. Tistory 글 본문 <figure> 의 CDN URL에서 다운로드
-3. 둘 다 없으면 AI로 새로 생성
+에디터 재발행 없이 PUT API로만 처리:
+  1. 로컬 캐시 → CDN 업로드 → <figure> 본문 앞 삽입 + thumbnail 필드 PUT
+  2. 로컬 HTML 파일도 <figure> 포함 버전으로 업데이트 (apply_pdf_attachments 연계)
 
 실행: python apply_thumbnails.py
 """
 
-import os
 import re
 import time
-import tempfile
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from agents.publisher_agent import auto_login
-from tools.thumbnail_gen import generate_thumbnail
+from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
 
 load_dotenv()
 
@@ -37,6 +34,16 @@ def parse_task(path: Path) -> dict:
     return result
 
 
+def get_local_html(task_id: str) -> str:
+    """로컬 HTML 파일 읽기 (TITLE 주석 제외, figure 없는 원본)."""
+    for folder in ("published", "preview", "draft"):
+        p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
+        if p.exists():
+            return re.sub(r"<!-- TITLE: .+? -->\n?", "",
+                          p.read_text(encoding="utf-8"), flags=re.DOTALL)
+    return ""
+
+
 def get_published_title(task_id: str) -> str:
     for folder in ("published", "preview", "draft"):
         p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
@@ -44,6 +51,21 @@ def get_published_title(task_id: str) -> str:
             m = re.match(r"<!-- TITLE: (.+?) -->", p.read_text(encoding="utf-8"))
             return m.group(1).strip() if m else ""
     return ""
+
+
+def update_local_html_with_figure(task_id: str, figure_html: str):
+    """로컬 HTML 파일 앞에 <figure> 삽입 (apply_pdf_attachments 연계용)."""
+    for folder in ("published", "preview", "draft"):
+        p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
+        if p.exists():
+            content = p.read_text(encoding="utf-8")
+            # 이미 figure 있으면 교체, 없으면 TITLE 주석 뒤에 삽입
+            title_m = re.match(r"(<!-- TITLE: .+? -->\n?)", content)
+            if title_m:
+                rest = content[len(title_m.group(0)):]
+                rest = re.sub(r"^<figure[^>]*>.*?</figure>\n?", "", rest, flags=re.DOTALL)
+                p.write_text(title_m.group(0) + figure_html + rest, encoding="utf-8")
+            return
 
 
 def find_post_id(posts: list, notice_name: str, task_id: str) -> int:
@@ -67,32 +89,12 @@ def find_post_id(posts: list, notice_name: str, task_id: str) -> int:
     return 0
 
 
-def get_img_bytes(task_id: str, task: dict, post_id: int) -> bytes:
-    """썸네일 bytes 반환. 캐시 → CDN → AI 생성 순."""
-    # 1) 로컬 캐시
+def get_img_bytes(task_id: str, task: dict) -> bytes:
+    """썸네일 bytes 반환. 캐시 → AI 생성 순."""
     cache = THUMB_DIR / f"{task_id}.png"
     if cache.exists():
         print(f"  💾 캐시 사용: {cache.name}")
         return cache.read_bytes()
-
-    # 2) Tistory 글 본문 <figure> CDN URL에서 다운로드
-    try:
-        r = requests.get(f"{BLOG_URL}/{post_id}",
-                         headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        m = re.search(r'<figure[^>]*>\s*<img[^>]+src=["\']([^"\']+)["\']', r.text)
-        if m:
-            cdn_url = m.group(1)
-            img_r = requests.get(cdn_url, timeout=20)
-            if img_r.status_code == 200:
-                img_bytes = img_r.content
-                THUMB_DIR.mkdir(parents=True, exist_ok=True)
-                cache.write_bytes(img_bytes)
-                print(f"  🌐 CDN에서 다운로드 후 캐시 저장")
-                return img_bytes
-    except Exception as e:
-        print(f"  ⚠️  CDN 다운로드 실패: {e}")
-
-    # 3) AI 새로 생성
     print(f"  🎨 AI 썸네일 생성 중...")
     img_bytes = generate_thumbnail(task)
     if img_bytes:
@@ -102,44 +104,51 @@ def get_img_bytes(task_id: str, task: dict, post_id: int) -> bytes:
     return img_bytes
 
 
-def set_representative_image(page, post_id: int, img_bytes: bytes) -> bool:
-    """수정 페이지 열고 발행 모달에서 대표이미지 파일 업로드."""
-    tmp_path = ""
-    try:
-        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        tmp.write(img_bytes)
-        tmp.close()
-        tmp_path = tmp.name
-
-        page.goto(f"{BLOG_URL}/manage/post/{post_id}", timeout=20000, wait_until="networkidle")
-        page.wait_for_timeout(2000)
-        page.locator("button:has-text('완료'), button:has-text('발행')").first.click()
-        page.wait_for_timeout(2000)
-        page.locator(".ReactModal__Content.editor_layer").wait_for(state="visible", timeout=8000)
-        page.wait_for_timeout(1000)
-
-        # 이미 썸네일 있으면 삭제 버튼 클릭 → file input 복원
-        delete_btn = page.locator(".box_thumb .ico_delete")
-        if delete_btn.is_visible():
-            delete_btn.click()
-            page.wait_for_timeout(1000)
-
-        page.locator(".box_thumb input[type='file']").set_input_files(tmp_path)
-        page.wait_for_timeout(1500)
-        page.locator("#open20").check(timeout=5000)
-        page.wait_for_timeout(500)
-        page.evaluate("document.getElementById('publish-btn').click()")
-        page.wait_for_timeout(3000)
-        return True
-    except Exception as e:
-        print(f"  ⚠️  실패: {e}")
+def put_thumbnail_and_figure(post_id: int, post_title: str, task_id: str,
+                              cdn_url: str, cookies: dict) -> bool:
+    """PUT API로 thumbnail 필드 + <figure> 본문 삽입. 에디터 재발행 없음."""
+    body = get_local_html(task_id)
+    if not body:
+        print(f"  ⚠️  로컬 HTML 없음")
         return False
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+
+    # 기존 <figure> 제거 후 새로 삽입
+    body = re.sub(r"^<figure[^>]*>.*?</figure>\n?", "", body.lstrip(), flags=re.DOTALL)
+
+    figure_html = (
+        f'<figure style="margin:0 0 16px 0; text-align:center;">'
+        f'<img src="{cdn_url}" style="width:100%; max-width:800px; border-radius:8px;" '
+        f'alt="썸네일">'
+        f'</figure>\n'
+    )
+    new_body = figure_html + body
+
+    slogan = re.sub(r"\s+", "-", re.sub(r"[^\w\s가-힣]", "", post_title).strip())
+    payload = {
+        "id": str(post_id), "title": post_title, "content": new_body,
+        "thumbnail": cdn_url,
+        "slogan": slogan, "visibility": 20, "category": 0,
+        "tag": "", "acceptComment": 1, "published": 0,
+        "password": "", "uselessMarginForEntry": 1,
+        "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
+        "type": "post", "attachments": [],
+        "recaptchaValue": "", "draftSequence": None, "totalWritingTimeMs": 3000,
+    }
+    hdrs = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Referer": f"{BLOG_URL}/manage/newpost/{post_id}?type=post",
+        "Origin": BLOG_URL,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    r = requests.put(f"{BLOG_URL}/manage/post/{post_id}.json",
+                     json=payload, cookies=cookies, headers=hdrs, timeout=20)
+    if r.status_code in (200, 201, 204):
+        # 로컬 파일도 <figure> 포함 버전으로 업데이트 (apply_pdf_attachments 연계)
+        update_local_html_with_figure(task_id, figure_html)
+        return True
+    print(f"  ⚠️  PUT 실패: HTTP {r.status_code}")
+    return False
 
 
 def get_post_list(page) -> list:
@@ -172,7 +181,7 @@ def get_post_list(page) -> list:
 
 def main():
     print("=" * 55)
-    print("기존 발행 글 대표이미지 소급 적용")
+    print("기존 발행 글 대표이미지 소급 적용 (PUT API)")
     print("=" * 55)
 
     targets = []
@@ -200,32 +209,42 @@ def main():
             print(f"  [{p['id']}] {p['title'][:50]}")
         print()
 
-        ok = skip = 0
-        for t in targets:
-            task_id     = t["task_id"]
-            notice_name = t.get("notice_name", "")
-            post_id     = find_post_id(posts, notice_name, task_id)
-
-            if not post_id:
-                print(f"[{task_id}] ⚠️  포스트 못 찾음: {notice_name[:35]}")
-                skip += 1
-                continue
-
-            print(f"[{task_id}] 포스트 {post_id} — {notice_name[:35]}")
-            img_bytes = get_img_bytes(task_id, t, post_id)
-            if not img_bytes:
-                print(f"  ⚠️  이미지 획득 실패")
-                skip += 1
-                continue
-
-            if set_representative_image(page, post_id, img_bytes):
-                print(f"  ✅ 대표이미지 설정 완료")
-                ok += 1
-            else:
-                skip += 1
-            time.sleep(2)
-
+        cookies = {c["name"]: c["value"] for c in ctx.cookies()
+                   if "tistory" in c.get("domain", "")}
         ctx.close()
+
+    ok = skip = 0
+    for t in targets:
+        task_id     = t["task_id"]
+        notice_name = t.get("notice_name", "")
+        post_id     = find_post_id(posts, notice_name, task_id)
+
+        if not post_id:
+            print(f"[{task_id}] ⚠️  포스트 못 찾음: {notice_name[:35]}")
+            skip += 1
+            continue
+
+        post_title  = next((p["title"] for p in posts if p["id"] == post_id), "")
+        print(f"[{task_id}] 포스트 {post_id} — {notice_name[:35]}")
+
+        img_bytes = get_img_bytes(task_id, t)
+        if not img_bytes:
+            print(f"  ⚠️  이미지 획득 실패")
+            skip += 1
+            continue
+
+        cdn_url = upload_thumbnail_to_tistory(img_bytes, BLOG_URL, cookies)
+        if not cdn_url:
+            print(f"  ⚠️  CDN 업로드 실패")
+            skip += 1
+            continue
+
+        if put_thumbnail_and_figure(post_id, post_title, task_id, cdn_url, cookies):
+            print(f"  ✅ 대표이미지 + <figure> 설정 완료")
+            ok += 1
+        else:
+            skip += 1
+        time.sleep(1)
 
     print(f"\n완료 — 성공 {ok}개 / 실패·스킵 {skip}개")
 
