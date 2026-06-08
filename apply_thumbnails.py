@@ -98,17 +98,14 @@ def set_representative_image(page, post_id: int, img_bytes: bytes) -> bool:
             delete_btn.click()
             page.wait_for_timeout(1000)
 
-        # .inner_box 클릭으로 파일 선택창 열기 (React 상태 정상 업데이트)
-        with page.expect_file_chooser() as fc_info:
-            page.locator(".box_thumb .inner_box").click()
-        fc_info.value.set_files(tmp_path)
-        page.wait_for_timeout(2000)
+        page.locator(".box_thumb input[type='file']").set_input_files(tmp_path)
+        page.wait_for_timeout(1500)
         try:
             page.locator("#open20").check(timeout=3000)
             page.wait_for_timeout(500)
         except Exception:
             pass
-        page.locator("#publish-btn").click(timeout=5000)
+        page.evaluate("document.getElementById('publish-btn').click()")
         page.wait_for_timeout(3000)
         return True
     except Exception as e:
