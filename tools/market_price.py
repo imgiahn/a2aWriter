@@ -60,19 +60,31 @@ _COMPOUND_KEYS = [k for k in LAWD_CD_MAP if " " in k]
 _SIMPLE_KEYS   = [k for k in LAWD_CD_MAP if " " not in k]
 
 
+def _normalize_location(location):
+    # type: (str) -> str
+    """주소에서 광역시/특별시/도 등 불필요한 접미사 제거해 매칭 용이하게 정규화."""
+    loc = location
+    loc = loc.replace("인천광역시", "인천")
+    loc = loc.replace("서울특별시", "서울")
+    loc = loc.replace("경기도", "경기")
+    loc = loc.replace("광역시", "")  # 대구·부산·울산·광주·대전 등
+    return loc
+
+
 def _extract_lawd_cd(location):
     # type: (str) -> tuple
     """주소에서 법정동코드와 지역명 추출. 못 찾으면 ("", "") 반환."""
+    loc = _normalize_location(location)
     for key in _COMPOUND_KEYS:
-        if key in location:
+        if key in loc:
             return LAWD_CD_MAP[key], key
     # 서울 중구 / 인천 중구 충돌 처리
-    if "서울" in location and "중구" in location:
+    if "서울" in loc and "중구" in loc:
         return "11140", "서울 중구"
-    if "인천" in location and "중구" in location:
-        return "22110", "인천 중구"
+    if "인천" in loc and "중구" in loc:
+        return LAWD_CD_MAP["인천 중구"], "인천 중구"
     for key in _SIMPLE_KEYS:
-        if key in location:
+        if key in loc:
             return LAWD_CD_MAP[key], key
     return "", ""
 
