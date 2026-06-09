@@ -189,40 +189,69 @@ def mbti_suggest(paths: dict):
     print(f"\n✅ {len(suggestions)}개 주제 제안 → blogs/mbtireallove/tasks/suggestions/")
 
 
-def mbti_run(paths: dict):
-    memory    = load_memory(paths["memory"])
+def _parse_suggestion(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    fields = {"topic": "", "series": "mbti_relationship", "priority": "high", "template": "new"}
+    for line in text.splitlines():
+        for key in ("topic", "series", "priority", "template"):
+            if line.startswith(f"{key}:"):
+                fields[key] = line.split(":", 1)[1].strip()
+    lines = text.splitlines()
+    outline_lines, in_outline = [], False
+    for line in lines:
+        if line.strip() == "## 구성안":
+            in_outline = True
+            continue
+        if in_outline and line.startswith("## ") and line.strip() != "## 구성안":
+            break
+        if in_outline:
+            outline_lines.append(line)
+    fields["outline"] = "\n".join(outline_lines).strip()
+    return fields
+
+
+def mbti_run(paths: dict, max_planned: int = 5):
     published = len(list(paths["published"].glob("*.md")))
     planned   = len(list(paths["planned"].glob("*.md")))
 
     print("=" * 50)
-    print("Planner Agent — mbtireallove")
+    print("Planner Agent — mbtireallove (반자동 모드)")
     print("=" * 50)
-    print(f"발행 완료: {published}개 | 대기 중: {planned}개\n")
+    print(f"발행 완료: {published}개 | 대기 중: {planned}개")
 
-    # ── 편집장 승인 후 여기에 주제 추가 ──────────────────
-    approved_tasks = [
-        # {"topic": "ENFP 권태기", "series": "mbti_relationship", "priority": "high",
-        #  "template": "default", "outline": "ENFP 권태기 주제 반응 테스트"},
-    ]
-    # ──────────────────────────────────────────────────────
-
-    if not approved_tasks:
-        print("⏸  승인된 Task 없음. tasks/suggestions/ 에서 AI 제안을 확인하세요.")
+    if planned >= max_planned:
+        print(f"⏸  planned {planned}개 — 추가 생성 불필요 (max={max_planned})")
         return
 
-    for task_data in approved_tasks:
+    suggestions = sorted(paths["suggestions"].glob("*.md"))
+    if not suggestions:
+        print("⏸  suggestions 없음. 새 시리즈 기획 필요")
+        return
+
+    to_promote = suggestions[:max_planned - planned]
+    promoted = 0
+    for s_path in to_promote:
+        fields = _parse_suggestion(s_path)
+        if not fields["topic"]:
+            print(f"  ⚠️  topic 없음, 스킵: {s_path.name}")
+            continue
         task_id = get_next_task_id(paths["planned"])
         create_task(
             folder       = paths["planned"],
             task_id      = task_id,
-            content_type = task_data.pop("type", "단편"),
-            parts        = task_data.pop("parts", 1),
-            outline      = task_data.pop("outline", ""),
-            **task_data,
+            topic        = fields["topic"],
+            series       = fields["series"],
+            priority     = fields["priority"],
+            template     = fields["template"],
+            content_type = "단편",
+            parts        = 1,
+            outline      = fields["outline"],
         )
-        print(f"  📋 Task 생성: {task_id} — {task_data['topic']}")
+        s_path.unlink()
+        print(f"  📋 {s_path.name} → planned: {task_id} — {fields['topic'][:35]}...")
+        promoted += 1
 
-    print(f"\n✅ {len(approved_tasks)}개 Task 생성 완료")
+    print(f"\n✅ {promoted}개 suggestion → planned 자동 승인 (남은 suggestions: {len(suggestions) - promoted}개)")
 
 
 # ─────────────────────────────────────────────
