@@ -245,8 +245,13 @@ def post_article(page: Page, blog_url: str, title: str, content: str, thumbnail_
     page.evaluate("document.getElementById('publish-btn').click()")
     page.wait_for_timeout(3000)
 
-    # 발행 후 URL에서 post_id 추출
-    m = re.search(r"/(\d+)$", page.url)
+    # 발행 후 URL에서 post_id 추출 (쿼리 파라미터 제거 후 확인)
+    url_clean = page.url.split("?")[0]
+    m = re.search(r"/(\d+)$", url_clean)
+    if not m:
+        page.wait_for_timeout(2000)
+        url_clean = page.url.split("?")[0]
+        m = re.search(r"/(\d+)$", url_clean)
     return int(m.group(1)) if m else None
 
 
