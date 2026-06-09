@@ -230,6 +230,7 @@ def _build_safety_margin_html(task, market_data):
     count           = market_data["count"]
     area_range      = market_data["area_range"]
     build_year_from = market_data.get("build_year_from", 0)
+    prop_type       = market_data.get("property_type", "아파트")
     type_name  = sale_info["type_name"]
     min_total  = sale_info["min_price_man"]
 
@@ -240,7 +241,7 @@ def _build_safety_margin_html(task, market_data):
     return (
         "<h2>📊 안전마진 분석</h2>\n"
         "<p style=\"color:#666; font-size:14px; margin:4px 0 12px;\">"
-        "{region} 전용 {area_range}{build_year_str} 최근 12개월 실거래 {count}건 기준</p>\n"
+        "{region} {prop_type} 전용 {area_range}{build_year_str} 최근 12개월 실거래 {count}건 기준</p>\n"
         "<table style=\"border-collapse:collapse; width:100%; text-align:center;\">\n"
         "  <thead><tr>\n"
         "    <th style=\"{th}\">구분</th>\n"
@@ -268,6 +269,7 @@ def _build_safety_margin_html(task, market_data):
         "</table>\n"
     ).format(
         region=region,
+        prop_type=prop_type,
         area_range=area_range,
         build_year_str=" {}년 이후 신축".format(build_year_from) if build_year_from else "",
         count=count,
@@ -601,7 +603,8 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
             _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
             from tools.market_price import get_market_price
             market_data = get_market_price(
-                location_detail or region, sale_info["area_m2"]
+                location_detail or region, sale_info["area_m2"],
+                supply_type=supply_type,
             )
             safety_html = _build_safety_margin_html(task, market_data)
             if safety_html:

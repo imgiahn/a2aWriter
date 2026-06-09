@@ -94,15 +94,20 @@ def _extract_lawd_cd(location):
     return "", ""
 
 
-def _fetch_month_transactions(lawd_cd, deal_ymd, service_key):
-    # type: (str, str, str) -> list
-    """특정 월 실거래 목록 반환 (XML 파싱). 실패 시 빈 리스트."""
-    # Decoding 키는 URL에 직접 넣을 때 반드시 quote 처리
+def _fetch_month_transactions(lawd_cd, deal_ymd, service_key, offi=False):
+    # type: (str, str, str, bool) -> list
+    """특정 월 실거래 목록 반환 (XML 파싱). 실패 시 빈 리스트.
+    offi=True 이면 오피스텔 API 사용.
+    """
     encoded_key = quote(service_key, safe="")
+    if offi:
+        svc = "RTMSDataSvcOffiTrade/getRTMSDataSvcOffiTrade"
+    else:
+        svc = "RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
     url = (
-        "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
+        "https://apis.data.go.kr/1613000/{svc}"
         "?serviceKey={key}&LAWD_CD={lawd}&DEAL_YMD={ymd}&pageNo=1&numOfRows=1000"
-    ).format(key=encoded_key, lawd=lawd_cd, ymd=deal_ymd)
+    ).format(svc=svc, key=encoded_key, lawd=lawd_cd, ymd=deal_ymd)
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
@@ -119,8 +124,8 @@ def _fetch_month_transactions(lawd_cd, deal_ymd, service_key):
         return []
 
 
-def get_market_price(location, area_m2, months=12, min_build_year=2010):
-    # type: (str, float, int, int) -> Optional[dict]
+def get_market_price(location, area_m2, months=12, min_build_year=2010, supply_type=""):
+    # type: (str, float, int, int, str) -> Optional[dict]
     """주변 시세 조회.
 
     Args:
@@ -128,6 +133,7 @@ def get_market_price(location, area_m2, months=12, min_build_year=2010):
         area_m2:        전용면적 (m²)
         months:         최근 몇 개월 기준
         min_build_year: 이 연도 이후 건축된 아파트만 포함 (구축 오염 방지)
+        supply_type:    공급유형 (예: "오피스텔" → 오피스텔 API 사용)
 
     Returns dict or None:
         avg_per_m2      int  m²당 평균가 (만원)
@@ -136,10 +142,13 @@ def get_market_price(location, area_m2, months=12, min_build_year=2010):
         region_name     str  지역명
         area_range      str  면적 검색 범위
         build_year_from int  적용된 건축년도 하한
+        property_type   str  "오피스텔" or "아파트"
     """
     service_key = os.getenv("MOLIT_API_KEY", "").strip()
     if not service_key:
         return None
+
+    is_offi = "오피스텔" in supply_type
 
     lawd_cd, region_name = _extract_lawd_cd(location)
     if not lawd_cd:
@@ -157,10 +166,10 @@ def get_market_price(location, area_m2, months=12, min_build_year=2010):
             month = 12
             year -= 1
 
-    # API 호출
+    # API 호출 (오피스텔/아파트 분기)
     all_txns = []
     for ym in ym_list:
-        txns = _fetch_month_transactions(lawd_cd, ym, service_key)
+        txns = _fetch_month_transactions(lawd_cd, ym, service_key, offi=is_offi)
         all_txns.extend(txns)
         time.sleep(0.1)
 
@@ -212,4 +221,5 @@ def get_market_price(location, area_m2, months=12, min_build_year=2010):
         "region_name":     region_name,
         "area_range":      "{:.0f}~{:.0f}㎡".format(area_low, area_high),
         "build_year_from": applied_year,
+        "property_type":   "오피스텔" if is_offi else "아파트",
     }
