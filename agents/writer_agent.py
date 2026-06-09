@@ -117,6 +117,150 @@ TH_STYLE    = "background:#f5f5f5; border:1px solid #ddd; padding:8px; text-alig
 TD_STYLE    = "border:1px solid #ddd; padding:8px; text-align:center;"
 
 
+def _parse_kor_price_man(text):
+    # type: (str) -> int
+    """'6억8210만원' → 68210 (만원 단위)"""
+    text = text.strip()
+    eok_m = re.search(r"(\d+)억", text)
+    man_m = re.search(r"억(\d+)만|^(\d+)만", text)
+    result = 0
+    if eok_m:
+        result += int(eok_m.group(1)) * 10000
+    if man_m:
+        val = man_m.group(1) or man_m.group(2)
+        if val:
+            result += int(val)
+    return result
+
+
+def _parse_sale_info(sale_price, house_types):
+    # type: (str, str) -> Optional[dict]
+    """sale_price/house_types에서 대표 타입의 면적·가격 추출."""
+    if not sale_price or not house_types:
+        return None
+    first_type = house_types.split(",")[0].strip()
+    area_m = re.match(r"(\d+)", first_type)
+    if not area_m:
+        return None
+    area_m2 = float(area_m.group(1))
+
+    # 해당 타입의 가격 범위 추출
+    escaped = re.escape(first_type)
+    price_m = re.search(escaped + r"\s+([^\s,]+)", sale_price)
+    price_str = price_m.group(1) if price_m else sale_price.split(",")[0]
+
+    parts = price_str.split("~")
+    min_price = _parse_kor_price_man(parts[0])
+    max_price = _parse_kor_price_man(parts[-1])
+    if min_price <= 0:
+        return None
+    return {
+        "type_name":     first_type,
+        "area_m2":       area_m2,
+        "min_price_man": min_price,
+        "max_price_man": max_price,
+    }
+
+
+def _fmt_man(v):
+    # type: (int) -> str
+    """68210 → '6억 8,210만원'"""
+    if v >= 10000:
+        eok = v // 10000
+        rem = v % 10000
+        return "{}억 {:,}만원".format(eok, rem) if rem else "{}억원".format(eok)
+    return "{:,}만원".format(v)
+
+
+def _build_safety_margin_html(task, market_data):
+    # type: (dict, Optional[dict]) -> str
+    """안전마진 분석 HTML 섹션 생성. 데이터 없으면 빈 문자열."""
+    if not market_data:
+        return ""
+    sale_price  = task.get("sale_price", "")
+    house_types = task.get("house_types", "")
+    sale_info   = _parse_sale_info(sale_price, house_types)
+    if not sale_info:
+        return ""
+
+    area_m2         = sale_info["area_m2"]
+    pyeong          = area_m2 * 0.3025
+    market_pyeong   = market_data["avg_per_pyeong"]
+    sale_min_pyeong = round(sale_info["min_price_man"] / pyeong)
+    margin_pyeong   = market_pyeong - sale_min_pyeong
+    margin_pct      = (margin_pyeong / market_pyeong * 100) if market_pyeong else 0
+    market_total    = round(market_pyeong * pyeong)
+    margin_total    = market_total - sale_info["min_price_man"]
+
+    if margin_pyeong >= 0:
+        color = "#2e7d32"
+        sign  = "+"
+        bg    = "#e8f5e9"
+    else:
+        color = "#c62828"
+        sign  = "-"
+        bg    = "#ffebee"
+
+    region     = market_data["region_name"]
+    count      = market_data["count"]
+    area_range = market_data["area_range"]
+    type_name  = sale_info["type_name"]
+    min_total  = sale_info["min_price_man"]
+
+    th = "background:#f5f5f5; border:1px solid #ddd; padding:10px; text-align:center;"
+    td = "border:1px solid #ddd; padding:10px; text-align:center;"
+    td_color = td + " color:{};".format(color)
+
+    return (
+        "<h2>📊 안전마진 분석</h2>\n"
+        "<p style=\"color:#666; font-size:14px; margin:4px 0 12px;\">"
+        "{region} 전용 {area_range} 최근 12개월 실거래 {count}건 기준</p>\n"
+        "<table style=\"border-collapse:collapse; width:100%; text-align:center;\">\n"
+        "  <thead><tr>\n"
+        "    <th style=\"{th}\">구분</th>\n"
+        "    <th style=\"{th}\">평당가</th>\n"
+        "    <th style=\"{th}\">전용 {area_m2:.0f}㎡ 기준 총액</th>\n"
+        "  </tr></thead>\n"
+        "  <tbody>\n"
+        "    <tr>\n"
+        "      <td style=\"{td}\">주변 시세 (실거래 평균)</td>\n"
+        "      <td style=\"{td}\"><strong>{market_pyeong:,}만원</strong></td>\n"
+        "      <td style=\"{td}\">{market_total_fmt}</td>\n"
+        "    </tr>\n"
+        "    <tr>\n"
+        "      <td style=\"{td}\">분양가 최저 ({type_name})</td>\n"
+        "      <td style=\"{td}\"><strong>{sale_min_pyeong:,}만원</strong></td>\n"
+        "      <td style=\"{td}\">{min_total_fmt}</td>\n"
+        "    </tr>\n"
+        "    <tr style=\"background:{bg}; font-weight:bold;\">\n"
+        "      <td style=\"{td}\">안전마진</td>\n"
+        "      <td style=\"{td_color}\">{sign}{margin_pyeong:,}만원/평</td>\n"
+        "      <td style=\"{td_color}\">"
+        "{sign}{margin_total_fmt} ({sign}{margin_pct:.1f}%)</td>\n"
+        "    </tr>\n"
+        "  </tbody>\n"
+        "</table>\n"
+    ).format(
+        region=region,
+        area_range=area_range,
+        count=count,
+        area_m2=area_m2,
+        market_pyeong=market_pyeong,
+        market_total_fmt=_fmt_man(market_total),
+        type_name=type_name,
+        sale_min_pyeong=sale_min_pyeong,
+        min_total_fmt=_fmt_man(min_total),
+        bg=bg,
+        sign=sign,
+        margin_pyeong=abs(margin_pyeong),
+        margin_total_fmt=_fmt_man(abs(margin_total)),
+        margin_pct=abs(margin_pct),
+        th=th,
+        td=td,
+        td_color=td_color,
+    )
+
+
 def _build_map_html(location: str) -> str:
     """위치 지도 링크 버튼 HTML 생성 (네이버 지도 + 카카오 지도).
 
@@ -420,6 +564,29 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
         html = html.replace("{QUAL_TABLES}", qual_html)
     elif qual_html:
         html = re.sub(r"(<h2>청약 일정</h2>)", f"{qual_html}\n\\1", html, count=1)
+
+    # 안전마진 분석 주입 (분양가 있는 경우만)
+    if sale_price:
+        sale_info = _parse_sale_info(sale_price, house_types)
+        if sale_info:
+            print("  시세 조회 중... (국토교통부 실거래가)")
+            import sys as _sys, os as _os
+            _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+            from tools.market_price import get_market_price
+            market_data = get_market_price(
+                location_detail or region, sale_info["area_m2"]
+            )
+            safety_html = _build_safety_margin_html(task, market_data)
+            if safety_html:
+                html = re.sub(
+                    r"(<h2>청약 조건</h2>)",
+                    safety_html + r"\1",
+                    html,
+                    count=1,
+                )
+                print("  안전마진 섹션 추가 완료")
+            else:
+                print("  시세 데이터 없음 — 안전마진 섹션 생략")
 
     return title, html
 
