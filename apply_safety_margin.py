@@ -218,8 +218,30 @@ def main(only_task_id=None):
         if "<h2>청약 조건</h2>" in html:
             new_html = html.replace("<h2>청약 조건</h2>", safety_html + "<h2>청약 조건</h2>", 1)
         else:
-            # 섹션 없으면 맨 끝에 추가
             new_html = html + "\n" + safety_html
+
+        # PDF 링크 보존: 로컬 HTML에 없지만 task에 PDF 있으면 재업로드+삽입
+        pdf_path = t.get("pdf_path", "")
+        if pdf_path and Path(pdf_path).exists() and "공고문 원본 PDF" not in new_html:
+            from apply_pdf_attachments import upload_pdf_and_get_url, get_pdf_filename
+            post_id_for_pdf = find_post_id(posts, notice_name, task_id)
+            if post_id_for_pdf:
+                pdf_filename = get_pdf_filename(t)
+                cdn_url = upload_pdf_and_get_url(post_id_for_pdf, pdf_path, pdf_filename, cookies)
+                if cdn_url:
+                    pdf_link = (
+                        '<p style="text-align:center; margin:8px 0 20px;">'
+                        f'<a href="{cdn_url}" target="_blank" rel="noopener" '
+                        'style="display:inline-block; padding:10px 20px; background:#2563eb;'
+                        ' color:#fff; border-radius:6px; text-decoration:none;'
+                        ' font-size:14px; font-weight:bold;">📄 공고문 원본 PDF 다운로드</a></p>\n'
+                    )
+                    if new_html.lstrip().startswith("<figure"):
+                        end = new_html.find("</figure>") + len("</figure>")
+                        new_html = new_html[:end] + "\n" + pdf_link + new_html[end:]
+                    else:
+                        new_html = pdf_link + new_html
+                    print(f"  PDF 링크 재삽입")
 
         # post_id 찾기
         post_id = find_post_id(posts, notice_name, task_id)
@@ -231,6 +253,12 @@ def main(only_task_id=None):
         # PUT
         if put_post(post_id, title, new_html, cookies):
             print(f"  안전마진 섹션 적용 완료 (post_id={post_id})")
+            # 로컬 HTML 파일 업데이트 (다음 소급 작업 시 PDF 링크 등 유실 방지)
+            for folder in ("published", "preview", "draft"):
+                p = Path(f"articles/{BLOG}/{folder}/{task_id}.html")
+                if p.exists():
+                    p.write_text(f"<!-- TITLE: {title} -->\n{new_html}", encoding="utf-8")
+                    break
             ok += 1
         else:
             print(f"  PUT 실패")
