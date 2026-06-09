@@ -2453,3 +2453,41 @@ Writer Agent — mbtireallove
 Publisher Agent — mbtireallove
 ==================================================
 발행할 Task 없음 (blogs/mbtireallove/tasks/writing)
+[main 40b9e8c] auto: 2026-06-09 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 32 insertions(+)
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260609_001 — e편한세상 부천 어반스퀘어 공고 해설
+  글 생성 중...
+  제목: 🏠 e편한세상 부천 어반스퀘어 무순위(사후) 신청 조건
+  초안 저장: articles/llmenginehistory/draft/20260609_001.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260609_001
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260609_001
+제목: 🏠 e편한세상 부천 어반스퀘어 무순위(사후) 신청 조건
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+  🎨 썸네일 생성 중...
+  🎨 썸네일 생성 완료 (gpt-image-2, 1,695,191 bytes)
+  🖼️  썸네일 업로드 완료
+  🖼️  대표이미지 업로드 완료
+✅ 발행 완료 → tasks/published/
+  📎 PDF 업로드 완료: 2026910152 e편한세상 부천 어반스퀘어 무순위 입주자모집공고문.pdf (14,936,488 bytes)
