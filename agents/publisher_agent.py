@@ -172,7 +172,12 @@ def reauth(pw, blog_url: str) -> Optional[BrowserContext]:
         return None
 
 
-def post_article(page: Page, blog_url: str, title: str, content: str, thumbnail_file: str = ""):
+CATEGORY_LH          = 1311445   # LH 청약 플러스
+CATEGORY_APPLYHOME   = 1311446   # 청약 Home
+
+
+def post_article(page: Page, blog_url: str, title: str, content: str,
+                 thumbnail_file: str = "", category_id: int = 0):
     page.goto(f"{blog_url}/manage/newpost/", timeout=20000)
     page.wait_for_load_state("networkidle", timeout=20000)
     page.wait_for_timeout(2000)
@@ -231,6 +236,17 @@ def post_article(page: Page, blog_url: str, title: str, content: str, thumbnail_
     modal.wait_for(state='visible', timeout=8000)
     page.locator('#open20').check(timeout=5000)
     page.wait_for_timeout(800)
+
+    # 카테고리 설정
+    if category_id:
+        try:
+            page.locator("#category-btn").click(timeout=3000)
+            page.wait_for_timeout(500)
+            page.locator(f"[data-id='{category_id}']").first.click(timeout=3000)
+            page.wait_for_timeout(500)
+            print(f"  🗂️  카테고리 설정 완료 (id={category_id})")
+        except Exception as e:
+            print(f"  ⚠️  카테고리 설정 실패: {e}")
 
     # 대표이미지 설정 — .box_thumb input[type=file]에 파일 직접 업로드
     if thumbnail_file:
@@ -492,9 +508,14 @@ def run(blog: str):
 
                 task_meta = {}
                 for line in task_file.read_text(encoding="utf-8").splitlines():
-                    for key in ("notice_name", "region", "housing_category", "supply_type"):
+                    for key in ("notice_name", "region", "housing_category",
+                                "supply_type", "detail_url"):
                         if line.startswith(f"{key}:"):
                             task_meta[key] = line.split(":", 1)[1].strip()
+
+                detail_url = task_meta.get("detail_url", "")
+                category_id = (CATEGORY_APPLYHOME if "applyhome.co.kr" in detail_url
+                               else CATEGORY_LH)
 
                 print(f"  🎨 썸네일 생성 중...")
                 img_bytes = generate_thumbnail(task_meta)
@@ -524,7 +545,8 @@ def run(blog: str):
                         )
                         publish_html = img_html + html
 
-            post_id = post_article(page, blog_url, title, publish_html, thumbnail_file)
+            post_id = post_article(page, blog_url, title, publish_html,
+                                   thumbnail_file, category_id=category_id)
 
             # 임시 파일 정리
             if thumbnail_file:
