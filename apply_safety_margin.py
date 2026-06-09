@@ -111,7 +111,15 @@ def get_post_list(page):
     return posts
 
 
-def put_post(post_id, title, html, cookies):
+def put_post(post_id, title, html, cookies, prev_html=""):
+    # PROTECTED_HTML_MARKERS 누락 경고
+    from tools.tistory_client import PROTECTED_HTML_MARKERS
+    if prev_html:
+        for _, (pattern, desc) in PROTECTED_HTML_MARKERS.items():
+            if pattern in prev_html and pattern not in html:
+                print(f"  ⚠️  PUT 경고: '{desc}' 누락 — 강제 중단")
+                return False
+
     slogan = re.sub(r"\s+", "-", re.sub(r"[^\w\s가-힣]", "", title).strip())
     payload = {
         "id": str(post_id), "title": title, "content": html,
@@ -250,8 +258,8 @@ def main(only_task_id=None):
             skip += 1
             continue
 
-        # PUT
-        if put_post(post_id, title, new_html, cookies):
+        # PUT (prev_html 전달 → PROTECTED_HTML_MARKERS 자동 체크)
+        if put_post(post_id, title, new_html, cookies, prev_html=html):
             print(f"  안전마진 섹션 적용 완료 (post_id={post_id})")
             # 로컬 HTML 파일 업데이트 (다음 소급 작업 시 PDF 링크 등 유실 방지)
             for folder in ("published", "preview", "draft"):

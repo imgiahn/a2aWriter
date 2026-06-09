@@ -11,6 +11,20 @@ import time
 from pathlib import Path
 from typing import Optional
 
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️  PUT 시 반드시 보존해야 할 HTML 요소 목록
+#
+# 포스트 본문을 수정(PUT)할 때 아래 요소들이 누락되면 독자에게 중요한 정보가
+# 사라진다. update_post() / put_post() 호출 전 new_html에 이 패턴이 있는지
+# 반드시 확인할 것.
+#
+# 새로운 소급 스크립트나 본문 수정 기능을 추가할 때 이 목록을 먼저 읽을 것.
+# ──────────────────────────────────────────────────────────────────────────────
+PROTECTED_HTML_MARKERS = {
+    "pdf_link":       ("공고문 원본 PDF", "PDF 다운로드 버튼 (apply_pdf_attachments.py 삽입)"),
+    "safety_margin":  ("안전마진 분석",   "안전마진 분석 섹션 (apply_safety_margin.py 삽입)"),
+}
+
 
 class TistoryClient:
     """티스토리 블로그 CRUD 클라이언트.
@@ -151,13 +165,22 @@ class TistoryClient:
     # 기존 포스트 수정
     # ──────────────────────────────────────────────
 
-    def update_post(self, post_id: int, title: str, html: str) -> bool:
+    def update_post(self, post_id: int, title: str, html: str,
+                    _prev_html: str = "") -> bool:
         """기존 포스트를 PUT API로 수정한다.
 
         tinyMCE setContent은 기존 포스트 편집 시 React 상태를 갱신하지 못해 무용지물.
         PUT /manage/post/{id}.json 직접 호출이 유일하게 확실한 방법.
         visibility:20 반드시 포함 (누락 시 비공개 전환됨).
+
+        _prev_html: 이전 본문 HTML. 전달 시 PROTECTED_HTML_MARKERS 보존 여부 자동 경고.
         """
+        # PROTECTED_HTML_MARKERS 누락 경고
+        if _prev_html:
+            for key, (pattern, desc) in PROTECTED_HTML_MARKERS.items():
+                if pattern in _prev_html and pattern not in html:
+                    print(f"  ⚠️  PUT 경고: '{desc}' 누락됨 — 덮어쓰기 전 확인 필요")
+
         import requests as _req
 
         if not self.ensure_login():
