@@ -102,14 +102,15 @@ def _fetch_month_transactions(lawd_cd, deal_ymd, service_key):
         return []
 
 
-def get_market_price(location, area_m2, months=12):
-    # type: (str, float, int) -> Optional[dict]
+def get_market_price(location, area_m2, months=12, min_build_year=2010):
+    # type: (str, float, int, int) -> Optional[dict]
     """주변 시세 조회.
 
     Args:
-        location: 주소 (예: "경기도 용인시 처인구 역북동 811번지")
-        area_m2:  전용면적 (m²)
-        months:   최근 몇 개월 기준
+        location:       주소 (예: "경기도 용인시 처인구 역북동 811번지")
+        area_m2:        전용면적 (m²)
+        months:         최근 몇 개월 기준
+        min_build_year: 이 연도 이후 건축된 아파트만 포함 (구축 오염 방지)
 
     Returns dict or None:
         avg_per_m2      int  m²당 평균가 (만원)
@@ -117,6 +118,7 @@ def get_market_price(location, area_m2, months=12):
         count           int  사용 거래 건수
         region_name     str  지역명
         area_range      str  면적 검색 범위
+        build_year_from int  적용된 건축년도 하한
     """
     service_key = os.getenv("MOLIT_API_KEY", "").strip()
     if not service_key:
@@ -148,37 +150,49 @@ def get_market_price(location, area_m2, months=12):
     if not all_txns:
         return None
 
-    # 유사 면적대 필터 (±15m²)
-    area_low  = area_m2 - 15
-    area_high = area_m2 + 15
-    filtered = []
-    for t in all_txns:
-        try:
-            # 기본 endpoint 필드명: excluUseAr, dealAmount
-            t_area = float(str(t.get("excluUseAr", "0")).strip())
-            if not (area_low <= t_area <= area_high):
+    def _filter(txns, build_year_from):
+        area_low  = area_m2 - 15
+        area_high = area_m2 + 15
+        result = []
+        for t in txns:
+            try:
+                t_area = float(str(t.get("excluUseAr", "0")).strip())
+                if not (area_low <= t_area <= area_high):
+                    continue
+                # 건축년도 필터
+                build_yr = int(str(t.get("buildYear", "0")).strip() or "0")
+                if build_yr and build_yr < build_year_from:
+                    continue
+                price_str = str(t.get("dealAmount", "0")).replace(",", "").strip()
+                price_man = int(price_str)
+                if price_man > 0:
+                    result.append(price_man / t_area)
+            except (ValueError, TypeError):
                 continue
-            price_str = str(t.get("dealAmount", "0")).replace(",", "").strip()
-            price_man = int(price_str)
-            if price_man > 0:
-                filtered.append({
-                    "area": t_area,
-                    "price_man": price_man,
-                    "per_m2": price_man / t_area,
-                })
-        except (ValueError, TypeError):
-            continue
+        return result
 
-    if len(filtered) < 3:
+    # 건축년도 하한 적용 → 데이터 부족하면 단계적으로 완화
+    applied_year = min_build_year
+    per_m2_list = _filter(all_txns, min_build_year)
+    if len(per_m2_list) < 5:
+        applied_year = 2000
+        per_m2_list = _filter(all_txns, 2000)
+    if len(per_m2_list) < 3:
+        applied_year = 0
+        per_m2_list = _filter(all_txns, 0)
+    if len(per_m2_list) < 3:
         return None
 
-    avg_per_m2     = sum(f["per_m2"] for f in filtered) / len(filtered)
+    avg_per_m2     = sum(per_m2_list) / len(per_m2_list)
     avg_per_pyeong = avg_per_m2 * 3.30579
 
+    area_low  = area_m2 - 15
+    area_high = area_m2 + 15
     return {
-        "avg_per_m2":     round(avg_per_m2),
-        "avg_per_pyeong": round(avg_per_pyeong),
-        "count":          len(filtered),
-        "region_name":    region_name,
-        "area_range":     "{:.0f}~{:.0f}㎡".format(area_low, area_high),
+        "avg_per_m2":      round(avg_per_m2),
+        "avg_per_pyeong":  round(avg_per_pyeong),
+        "count":           len(per_m2_list),
+        "region_name":     region_name,
+        "area_range":      "{:.0f}~{:.0f}㎡".format(area_low, area_high),
+        "build_year_from": applied_year,
     }

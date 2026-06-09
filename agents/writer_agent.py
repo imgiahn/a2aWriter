@@ -201,9 +201,10 @@ def _build_safety_margin_html(task, market_data):
         sign  = "-"
         bg    = "#ffebee"
 
-    region     = market_data["region_name"]
-    count      = market_data["count"]
-    area_range = market_data["area_range"]
+    region          = market_data["region_name"]
+    count           = market_data["count"]
+    area_range      = market_data["area_range"]
+    build_year_from = market_data.get("build_year_from", 0)
     type_name  = sale_info["type_name"]
     min_total  = sale_info["min_price_man"]
 
@@ -214,7 +215,7 @@ def _build_safety_margin_html(task, market_data):
     return (
         "<h2>📊 안전마진 분석</h2>\n"
         "<p style=\"color:#666; font-size:14px; margin:4px 0 12px;\">"
-        "{region} 전용 {area_range} 최근 12개월 실거래 {count}건 기준</p>\n"
+        "{region} 전용 {area_range}{build_year_str} 최근 12개월 실거래 {count}건 기준</p>\n"
         "<table style=\"border-collapse:collapse; width:100%; text-align:center;\">\n"
         "  <thead><tr>\n"
         "    <th style=\"{th}\">구분</th>\n"
@@ -243,6 +244,7 @@ def _build_safety_margin_html(task, market_data):
     ).format(
         region=region,
         area_range=area_range,
+        build_year_str=" {}년 이후 신축".format(build_year_from) if build_year_from else "",
         count=count,
         area_m2=area_m2,
         market_pyeong=market_pyeong,
