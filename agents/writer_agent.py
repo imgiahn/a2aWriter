@@ -164,13 +164,14 @@ def _parse_sale_info(sale_price, house_types):
         return None
     area_m2 = float(area_m.group(1))
 
-    # 해당 타입의 가격 범위 추출
-    # 룩어헤드: 다음 타입+숫자 패턴 또는 문자열 끝까지
+    # 가격 추출: 타입명 정확 매칭 → 숫자 prefix 매칭 순으로 시도
+    # (house_types와 sale_price의 타입명 표기가 다를 때 처리:
+    #  "84.9700A" vs "84A", "33㎡" vs "33타입", "59A" vs "59A타입" 등)
+    _PRICE_LA = r"\s+(.+?)(?=,\s*[^\s,]+\s+[\d억만]|\s*$)"
     escaped = re.escape(first_type)
-    price_m = re.search(
-        escaped + r"\s+(.+?)(?=,\s*[^\s,]+\s+[\d억만]|\s*$)",
-        sale_price,
-    )
+    price_m = re.search(escaped + _PRICE_LA, sale_price)
+    if not price_m:
+        price_m = re.search(r"\b" + area_m.group(1) + r"\D*" + _PRICE_LA, sale_price)
     price_str = price_m.group(1).strip() if price_m else sale_price.split(",")[0].strip()
 
     parts = price_str.split("~")
