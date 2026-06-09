@@ -1,8 +1,9 @@
 """
 apply_safety_margin.py — 기존 발행 글에 안전마진 분석 섹션 소급 적용
 
-실행 (전체):  python apply_safety_margin.py
-실행 (1건):   python apply_safety_margin.py --task 20260606_007
+실행 (전체):         python apply_safety_margin.py
+실행 (1건):          python apply_safety_margin.py --task 20260606_007
+실행 (강제 재적용):  python apply_safety_margin.py --force
 """
 
 import re
@@ -27,6 +28,9 @@ BLOG      = "llmenginehistory"
 BLOG_URL  = "https://llmenginehistory.tistory.com"
 TASKS_DIR = Path(f"blogs/{BLOG}/tasks/published")
 
+CATEGORY_LH        = 1311445   # LH 청약 플러스
+CATEGORY_APPLYHOME = 1311446   # 청약 Home
+
 
 def parse_task(path):
     result = {"task_id": path.stem}
@@ -39,6 +43,11 @@ def parse_task(path):
             k, v = line.split(": ", 1)
             result[k.strip()] = v.strip()
     return result
+
+
+def get_category_id(task):
+    detail_url = task.get("detail_url", "")
+    return CATEGORY_APPLYHOME if "applyhome.co.kr" in detail_url else CATEGORY_LH
 
 
 def get_article_html(task_id):
@@ -111,7 +120,7 @@ def get_post_list(page):
     return posts
 
 
-def put_post(post_id, title, html, cookies, prev_html=""):
+def put_post(post_id, title, html, cookies, prev_html="", category_id=0):
     # PROTECTED_HTML_MARKERS 누락 경고
     from tools.tistory_client import PROTECTED_HTML_MARKERS
     if prev_html:
@@ -123,7 +132,7 @@ def put_post(post_id, title, html, cookies, prev_html=""):
     slogan = re.sub(r"\s+", "-", re.sub(r"[^\w\s가-힣]", "", title).strip())
     payload = {
         "id": str(post_id), "title": title, "content": html,
-        "slogan": slogan, "visibility": 20, "category": 0,
+        "slogan": slogan, "visibility": 20, "category": category_id,
         "tag": "", "acceptComment": 1, "published": 0,
         "password": "", "uselessMarginForEntry": 1,
         "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
@@ -142,7 +151,7 @@ def put_post(post_id, title, html, cookies, prev_html=""):
     return r.status_code in (200, 201, 204)
 
 
-def main(only_task_id=None):
+def main(only_task_id=None, force=False):
     print("=" * 55)
     print("기존 발행 글 안전마진 분석 소급 적용")
     print("=" * 55)
@@ -191,6 +200,8 @@ def main(only_task_id=None):
         location    = t.get("location_detail") or t.get("region", "")
         sale_price  = t.get("sale_price", "")
         house_types = t.get("house_types", "")
+        supply_type = t.get("supply_type", "")
+        category_id = get_category_id(t)
 
         print(f"[{task_id}] {notice_name[:35]}")
 
@@ -201,11 +212,17 @@ def main(only_task_id=None):
             skip += 1
             continue
 
-        # 이미 적용된 경우 스킵
+        # 이미 적용된 경우 스킵 (--force 시 재계산)
         if "안전마진 분석" in html:
-            print(f"  이미 적용됨 — 스킵")
-            skip += 1
-            continue
+            if not force:
+                print(f"  이미 적용됨 — 스킵")
+                skip += 1
+                continue
+            # force 모드: 기존 안전마진 섹션 제거 후 재계산
+            html = re.sub(
+                r"<h2>📊 안전마진 분석</h2>.*?</table>\n?",
+                "", html, flags=re.DOTALL
+            )
 
         # 안전마진 섹션 생성
         sale_info = _parse_sale_info(sale_price, house_types)
@@ -215,7 +232,8 @@ def main(only_task_id=None):
             continue
 
         print(f"  시세 조회 중... ({location[:20]})")
-        market_data = get_market_price(location, sale_info["area_m2"])
+        market_data = get_market_price(location, sale_info["area_m2"],
+                                       supply_type=supply_type)
         safety_html = _build_safety_margin_html(t, market_data)
         if not safety_html:
             print(f"  시세 데이터 없음 — 스킵")
@@ -259,7 +277,8 @@ def main(only_task_id=None):
             continue
 
         # PUT (prev_html 전달 → PROTECTED_HTML_MARKERS 자동 체크)
-        if put_post(post_id, title, new_html, cookies, prev_html=html):
+        if put_post(post_id, title, new_html, cookies,
+                    prev_html=html, category_id=category_id):
             print(f"  안전마진 섹션 적용 완료 (post_id={post_id})")
             # 로컬 HTML 파일 업데이트 (다음 소급 작업 시 PDF 링크 등 유실 방지)
             for folder in ("published", "preview", "draft"):
@@ -279,6 +298,7 @@ def main(only_task_id=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", default=None, help="특정 task_id만 적용 (예: 20260606_007)")
+    parser.add_argument("--task",  default=None,  help="특정 task_id만 적용")
+    parser.add_argument("--force", action="store_true", help="이미 적용된 글도 재계산")
     args = parser.parse_args()
-    main(only_task_id=args.task)
+    main(only_task_id=args.task, force=args.force)
