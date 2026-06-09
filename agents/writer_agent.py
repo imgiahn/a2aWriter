@@ -119,11 +119,30 @@ TD_STYLE    = "border:1px solid #ddd; padding:8px; text-align:center;"
 
 def _parse_kor_price_man(text):
     # type: (str) -> int
-    """'6억8210만원' → 68210 (만원 단위)"""
-    text = text.strip()
-    eok_m = re.search(r"(\d+)억", text)
-    man_m = re.search(r"억(\d+)만|^(\d+)만", text)
+    """가격 문자열 → 만원 단위 정수.
+
+    지원 형식:
+      '6억8210만원'       → 68210
+      '4억 7,900만원'     → 47900
+      '30,631만원'        → 30631
+      '602,607,000원'     → 60260  (원 단위 → ÷10000)
+      '47,449'            → 47449  (만원 범위 앞부분, 단위 생략)
+    """
+    text = text.strip().rstrip(",")
+    clean = text.replace(" ", "").replace(",", "")
+
+    # 원 단위: 숫자만 + '원' (만/억 없음) → ÷10000
+    if re.match(r"^\d+원$", clean):
+        return int(clean[:-1]) // 10000
+
+    # 순수 숫자 → 만원 단위로 간주 (범위 앞부분 "47,449~49,289만원")
+    if re.match(r"^\d+$", clean):
+        return int(clean)
+
+    # 억/만 혼합
     result = 0
+    eok_m = re.search(r"(\d+)억", clean)
+    man_m = re.search(r"억(\d+)만|^(\d+)만", clean)
     if eok_m:
         result += int(eok_m.group(1)) * 10000
     if man_m:
@@ -138,16 +157,21 @@ def _parse_sale_info(sale_price, house_types):
     """sale_price/house_types에서 대표 타입의 면적·가격 추출."""
     if not sale_price or not house_types:
         return None
-    first_type = house_types.split(",")[0].strip()
+    # house_types 첫 번째 타입 (예: "84A / 전용 84.69㎡" → "84A")
+    first_type = house_types.split(",")[0].split("/")[0].strip()
     area_m = re.match(r"(\d+)", first_type)
     if not area_m:
         return None
     area_m2 = float(area_m.group(1))
 
     # 해당 타입의 가격 범위 추출
+    # 룩어헤드: 다음 타입+숫자 패턴 또는 문자열 끝까지
     escaped = re.escape(first_type)
-    price_m = re.search(escaped + r"\s+([^\s,]+)", sale_price)
-    price_str = price_m.group(1) if price_m else sale_price.split(",")[0]
+    price_m = re.search(
+        escaped + r"\s+(.+?)(?=,\s*[^\s,]+\s+[\d억만]|\s*$)",
+        sale_price,
+    )
+    price_str = price_m.group(1).strip() if price_m else sale_price.split(",")[0].strip()
 
     parts = price_str.split("~")
     min_price = _parse_kor_price_man(parts[0])
