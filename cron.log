@@ -3058,3 +3058,33 @@ Planner Agent — llmenginehistory (청약홈)
   스킵 (중복): 더샵 분당센트로(2차)
 
 ✅ 5개 Task 생성 완료
+[main 2208847] auto: 2026-06-11 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 6 files changed, 840 insertions(+)
+ create mode 100644 blogs/llmenginehistory/tasks/planned/20260611_001.md
+ create mode 100644 blogs/llmenginehistory/tasks/planned/20260611_002.md
+ create mode 100644 blogs/llmenginehistory/tasks/planned/20260611_003.md
+ create mode 100644 blogs/llmenginehistory/tasks/planned/20260611_004.md
+ create mode 100644 blogs/llmenginehistory/tasks/planned/20260611_005.md
+==================================================
+Planner Agent — mbtireallove (반자동 모드)
+==================================================
+발행 완료: 62개 | 대기 중: 1개
+  📋 20260609_006s.md → planned: 20260611_001 — ESTP가 관심 없을 때 보이는 행동 5가지 – 텐션은 있어도 ...
+  📋 20260609_007s.md → planned: 20260611_002 — ESFJ가 관심 없을 때 보이는 행동 5가지 – 배려가 감정을 ...
+  📋 20260609_008s.md → planned: 20260611_003 — ESTJ가 관심 없을 때 보이는 행동 5가지 – 관계를 굳이 늘...
+  📋 20260609_009s.md → planned: 20260611_004 — INFP가 관심 없을 때 보이는 행동 5가지 – 마음을 열지 않...
+
+✅ 4개 suggestion → planned 자동 승인 (남은 suggestions: 7개)
