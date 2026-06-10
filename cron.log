@@ -2915,3 +2915,41 @@ Task: 20260609_002
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ❌ 발행 실패: local variable 'category_id' referenced before assignment → tasks/failed/
+[main 0ba0d83] auto: 2026-06-10 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 3 files changed, 38 insertions(+)
+ rename blogs/mbtireallove/tasks/{writing => failed}/20260609_002.md (100%)
+ rename blogs/mbtireallove/tasks/{planned => writing}/20260609_003.md (100%)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260609_004 — ENTJ가 관심 없을 때 보이는 행동 5가지 – 효율적으로 선을 긋는 중일 수 있다
+  글 생성 중...
+  제목: ENTJ가 관심 없을 때 보이는 행동 5가지 – 효율적으로 선을 긋는 중일 수 있다 – ENTJ의 무심함은 차가움보다 ‘정리된 거리감’에 가까울 수 있어요
+  초안 저장: articles/mbtireallove/draft/20260609_004.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260609_004
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260609_003
+제목: ENFJ가 관심 없을 때 보이는 행동 5가지 – 챙겨준다고 감정이 있는 건 아닐 수 있다 – 다정함과 호감은 다를 수 있어요, ENFJ의 진짜 마음 구분법
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+❌ 발행 실패: local variable 'category_id' referenced before assignment → tasks/failed/
