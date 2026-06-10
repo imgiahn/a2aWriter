@@ -500,6 +500,7 @@ def run(blog: str):
             # llmenginehistory: 발행 전에 썸네일 생성
             # → 임시 파일로 저장 (대표이미지 파일 업로드용)
             # → CDN 업로드 후 html 앞에 삽입 (본문 상단 이미지용)
+            category_id = 0
             thumbnail_file = ""
             if blog == "llmenginehistory":
                 import sys as _sys, os as _os, tempfile as _tmp
