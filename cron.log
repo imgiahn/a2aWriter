@@ -2681,3 +2681,63 @@ Planner Agent — mbtireallove (반자동 모드)
 ==================================================
 발행 완료: 58개 | 대기 중: 5개
 ⏸  planned 5개 — 추가 생성 불필요 (max=5)
+[main 0ddb252] auto: 2026-06-10 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 26 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260609_001 — ENFP가 관심 없을 때 보이는 행동 5가지 – 다정해도 마음은 없을 수 있다
+  글 생성 중...
+  제목: ENFP가 관심 없을 때 보이는 행동 5가지 – 다정해도 마음은 없을 수 있다 – ENFP의 친절을 호감으로 착각했다면, 이 신호부터 보세요
+  초안 저장: articles/mbtireallove/draft/20260609_001.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260609_001
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260609_001
+제목: ENFP가 관심 없을 때 보이는 행동 5가지 – 다정해도 마음은 없을 수 있다 – ENFP의 친절을 호감으로 착각했다면, 이 신호부터 보세요
+Traceback (most recent call last):
+  File "/home/ec2-user/a2aWriter/agents/publisher_agent.py", line 582, in <module>
+    run(args.blog)
+  File "/home/ec2-user/a2aWriter/agents/publisher_agent.py", line 477, in run
+    page = context.new_page()
+  File "/home/ec2-user/a2aWriter/venv/lib64/python3.9/site-packages/playwright/sync_api/_generated.py", line 14111, in new_page
+    return mapping.from_impl(self._sync(self._impl_obj.new_page()))
+  File "/home/ec2-user/a2aWriter/venv/lib64/python3.9/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+  File "/home/ec2-user/a2aWriter/venv/lib64/python3.9/site-packages/playwright/_impl/_browser_context.py", line 343, in new_page
+    return from_channel(await self._channel.send("newPage", None))
+  File "/home/ec2-user/a2aWriter/venv/lib64/python3.9/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+  File "/home/ec2-user/a2aWriter/venv/lib64/python3.9/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TargetClosedError: BrowserContext.new_page: Target page, context or browser has been closed
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+처리할 Task 없음
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+발행할 Task 없음 (blogs/llmenginehistory/tasks/writing)
