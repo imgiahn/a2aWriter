@@ -3211,3 +3211,45 @@ Call log:
   🖼️  대표이미지 업로드 완료
 ✅ 발행 완료 → tasks/published/
   📎 PDF 업로드 완료: 2026910151 에스아이팰리스 올림픽공원 (9차) 무순위 입주자모집공고문.pdf (246,565 bytes)
+[main 63e648d] auto: 2026-06-11 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 4 files changed, 202 insertions(+)
+ create mode 100644 articles/llmenginehistory/published/20260611_001.html
+ create mode 100644 articles/llmenginehistory/summary/20260611_001.txt
+ rename blogs/llmenginehistory/tasks/{planned => published}/20260611_001.md (100%)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+Already up to date.
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260611_001 — ESTP가 관심 없을 때 보이는 행동 5가지 – 텐션은 있어도 진심은 아닐 수 있다
+  글 생성 중...
+  제목: ESTP가 관심 없을 때 보이는 행동 5가지 – 텐션은 있어도 진심은 아닐 수 있다 – ESTP의 밝은 텐션에 헷갈렸다면, 진짜 관심은 여기서 갈려요
+  초안 저장: articles/mbtireallove/draft/20260611_001.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260611_001
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260611_001
+제목: ESTP가 관심 없을 때 보이는 행동 5가지 – 텐션은 있어도 진심은 아닐 수 있다 – ESTP의 밝은 텐션에 헷갈렸다면, 진짜 관심은 여기서 갈려요
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
