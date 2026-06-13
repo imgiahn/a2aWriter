@@ -4172,3 +4172,62 @@ Task: 20260612_005
   로그인 필요 → 자동 로그인 시도...
   ✅ 자동 로그인 성공
 ✅ 발행 완료 → tasks/published/
+[main 1f2a1b1] auto: 2026-06-13 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 5 files changed, 90 insertions(+)
+ create mode 100644 articles/mbtireallove/published/20260612_005.html
+ create mode 100644 articles/mbtireallove/summary/20260612_005.txt
+ rename blogs/llmenginehistory/tasks/{planned => writing}/20260613_001.md (100%)
+ rename blogs/mbtireallove/tasks/{planned => published}/20260612_005.md (100%)
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260613_001
+제목: 🏠 북오산자이 드포레 민영 신청 조건 총정리
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+  🎨 썸네일 생성 중...
+  🎨 썸네일 생성 완료 (gpt-image-2, 1,616,744 bytes)
+  🖼️  썸네일 업로드 완료
+  ⚠️  카테고리 설정 실패: Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator("#category-btn")
+    - locator resolved to <button role="combobox" id="category-btn" aria-expanded="false" aria-haspopup="listbox" aria-controls="category-list" aria-labelledby="category-label">…</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ReactModal__Overlay ReactModal__Overlay--after-open">…</div> from <div class="ReactModalPortal">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ReactModal__Overlay ReactModal__Overlay--after-open">…</div> from <div class="ReactModalPortal">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ReactModal__Overlay ReactModal__Overlay--after-open">…</div> from <div class="ReactModalPortal">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+  🖼️  대표이미지 업로드 완료
+✅ 발행 완료 → tasks/published/
+  📎 PDF 업로드 완료: 2026000248 북오산자이 드포레 입주자모집공고문.pdf (901,275 bytes)
