@@ -4122,3 +4122,53 @@ Planner Agent — mbtireallove (반자동 모드)
   📋 20260609_016s.md → planned: 20260613_002 — ISTJ가 관심 없을 때 보이는 행동 5가지 – 선을 넘지 않는...
 
 ✅ 2개 suggestion → planned 자동 승인 (남은 suggestions: 0개)
+[main 31336d2] auto: 2026-06-13 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 6 files changed, 332 insertions(+), 104 deletions(-)
+ create mode 100644 blogs/llmenginehistory/tasks/planned/20260613_001.md
+ create mode 100644 blogs/mbtireallove/tasks/planned/20260613_001.md
+ create mode 100644 blogs/mbtireallove/tasks/planned/20260613_002.md
+ delete mode 100644 blogs/mbtireallove/tasks/suggestions/20260609_015s.md
+ delete mode 100644 blogs/mbtireallove/tasks/suggestions/20260609_016s.md
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260612_005 — ISTP가 관심 없을 때 보이는 행동 5가지 – 무심함 속에 행동이 없다면
+  글 생성 중...
+  제목: ISTP가 관심 없을 때 보이는 행동 5가지 – 무심함 속에 행동이 없다면 – ISTP의 무심함과 진짜 무관심은 다릅니다
+  초안 저장: articles/mbtireallove/draft/20260612_005.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260612_005
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260613_001 — 북오산자이 드포레 공고 해설
+  글 생성 중...
+  시세 조회 중... (국토교통부 실거래가)
+  안전마진 섹션 추가 완료
+  제목: 🏠 북오산자이 드포레 민영 신청 조건 총정리
+  초안 저장: articles/llmenginehistory/draft/20260613_001.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260613_001
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260612_005
+제목: ISTP가 관심 없을 때 보이는 행동 5가지 – 무심함 속에 행동이 없다면 – ISTP의 무심함과 진짜 무관심은 다릅니다
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+✅ 발행 완료 → tasks/published/
