@@ -240,9 +240,9 @@ def post_article(page: Page, blog_url: str, title: str, content: str,
     # 카테고리 설정
     if category_id:
         try:
-            page.locator("#category-btn").click(timeout=3000)
-            page.wait_for_timeout(500)
-            page.locator(f"[data-id='{category_id}']").first.click(timeout=3000)
+            page.locator("#category-btn").click(timeout=8000, force=True)
+            page.wait_for_timeout(800)
+            page.locator(f"[data-id='{category_id}']").first.click(timeout=5000)
             page.wait_for_timeout(500)
             print(f"  🗂️  카테고리 설정 완료 (id={category_id})")
         except Exception as e:
