@@ -5141,3 +5141,38 @@ Planner Agent — mbtireallove (반자동 모드)
 ==================================================
 발행 완료: 74개 | 대기 중: 16개
 ⏸  planned 16개 — 추가 생성 불필요 (max=5)
+[main 9e95916] auto: 2026-06-16 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 51 insertions(+)
+==================================================
+Writer Agent — mbtireallove
+==================================================
+Task: 20260615_001 — ISTJ 연애 특성 — 성격, 이상형, 호감 신호
+  글 생성 중...
+  제목: ISTJ 연애 특성 — 성격, 이상형, 호감 신호 – 차갑다고 오해받는 ISTJ의 진짜 연애 신호
+  초안 저장: articles/mbtireallove/draft/20260615_001.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260615_001
+==================================================
+Publisher Agent — mbtireallove
+==================================================
+Task: 20260615_001
+제목: ISTJ 연애 특성 — 성격, 이상형, 호감 신호 – 차갑다고 오해받는 ISTJ의 진짜 연애 신호
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+  🔍 발행 후 URL: https://mbtireallove.tistory.com/manage/posts/
+  🔍 발행 후 URL(재시도): https://mbtireallove.tistory.com/manage/posts/
+✅ 발행 완료 → tasks/published/
