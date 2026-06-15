@@ -242,7 +242,7 @@ def post_article(page: Page, blog_url: str, title: str, content: str,
         try:
             page.evaluate("document.getElementById('category-btn').click()")
             page.wait_for_timeout(1000)
-            page.locator(f"[data-id='{category_id}']").first.click(timeout=5000, force=True)
+            page.locator(f"[category-id='{category_id}']").first.click(timeout=5000, force=True)
             page.wait_for_timeout(500)
             print(f"  🗂️  카테고리 설정 완료 (id={category_id})")
         except Exception as e:
