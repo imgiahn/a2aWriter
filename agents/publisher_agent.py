@@ -237,12 +237,12 @@ def post_article(page: Page, blog_url: str, title: str, content: str,
     page.locator('#open20').check(timeout=5000)
     page.wait_for_timeout(800)
 
-    # 카테고리 설정
+    # 카테고리 설정 — JS 직접 클릭 (Playwright actionability 체크 우회)
     if category_id:
         try:
-            page.locator("#category-btn").click(timeout=8000, force=True)
-            page.wait_for_timeout(800)
-            page.locator(f"[data-id='{category_id}']").first.click(timeout=5000)
+            page.evaluate("document.getElementById('category-btn').click()")
+            page.wait_for_timeout(1000)
+            page.locator(f"[data-id='{category_id}']").first.click(timeout=5000, force=True)
             page.wait_for_timeout(500)
             print(f"  🗂️  카테고리 설정 완료 (id={category_id})")
         except Exception as e:
