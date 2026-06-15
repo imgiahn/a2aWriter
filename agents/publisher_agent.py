@@ -54,12 +54,43 @@ def get_next_task(tasks_writing: Path) -> Optional[Path]:
 
 
 def read_draft(task_id: str, articles_draft: Path) -> tuple:
+    """(title, html, tags) 반환."""
     draft   = articles_draft / f"{task_id}.html"
     content = draft.read_text(encoding="utf-8")
-    m       = re.match(r"<!-- TITLE: (.+?) -->\n?(.*)", content, re.DOTALL)
-    title   = m.group(1) if m else task_id
-    html    = m.group(2) if m else content
-    return title, html
+    m = re.match(r"<!-- TITLE: (.+?) -->\n?", content)
+    title = m.group(1).strip() if m else task_id
+    rest  = re.sub(r"<!-- TITLE: .+? -->\n?", "", content, count=1)
+    tags_m = re.search(r"<!-- TAGS: (.+?) -->", rest)
+    tags   = [t.strip() for t in tags_m.group(1).split(",")] if tags_m else []
+    html   = re.sub(r"<!-- TAGS: .+? -->\n?", "", rest, count=1)
+    return title, html, tags
+
+
+# 발행 전 필수 검증 키워드 (제목에 2개 이상)
+_TITLE_KEYWORDS = ["분양가", "청약일정", "안전마진", "전매제한", "거주의무",
+                   "무순위", "특별공급", "신혼희망타운", "공공분양"]
+
+
+def _validate_pre_publish(title: str, html: str, tags: list, category_id: int) -> list:
+    """발행 전 필수 조건 검증. 실패 사유 목록 반환 (빈 리스트 = 통과)."""
+    issues = []
+    kw_count = sum(1 for k in _TITLE_KEYWORDS if k in title)
+    if kw_count < 2:
+        issues.append(f"제목 키워드 부족 ({kw_count}개/2개 필요): {title}")
+    if not category_id:
+        issues.append("카테고리 미설정 (카테고리 없음 발행 금지)")
+    if len(tags) < 8:
+        issues.append(f"태그 부족 ({len(tags)}개/8개 필요)")
+    if "결론 먼저 보기" not in html:
+        issues.append("'결론 먼저 보기' 섹션 없음")
+    if "안전마진" not in html:
+        issues.append("안전마진 섹션 없음")
+    if "청약 일정" not in html:
+        issues.append("청약 일정 섹션 없음")
+    text_only = re.sub(r"<[^>]+>", "", html)
+    if len(text_only) < 1500:
+        issues.append(f"본문 너무 짧음 ({len(text_only)}자/1500자 필요)")
+    return issues
 
 
 def is_logged_in(page: Page, blog_url: str) -> bool:
@@ -172,12 +203,50 @@ def reauth(pw, blog_url: str) -> Optional[BrowserContext]:
         return None
 
 
-CATEGORY_LH          = 1311445   # LH 청약 플러스
-CATEGORY_APPLYHOME   = 1311446   # 청약 Home
+CATEGORY_LH          = 1311445   # LH 청약 플러스 (부모)
+CATEGORY_APPLYHOME   = 1311446   # 청약 Home (부모)
+
+# ── 서브카테고리 ID (티스토리 관리자에서 생성 후 ID 입력 필요) ──────────────────
+# 티스토리 관리자 → 카테고리 → 하위 카테고리 생성 → 글쓰기 에디터에서 ID 확인
+# python get_category_ids.py 로 자동 조회 가능 (세션 갱신 후)
+CATEGORY_APPLYHOME_SALE      = 0   # 청약 Home / 민영분양
+CATEGORY_APPLYHOME_UNSOLD    = 0   # 청약 Home / 무순위·줍줍
+CATEGORY_LH_PUBLIC           = 0   # LH 청약 플러스 / 공공분양
+CATEGORY_LH_NEWLYWED         = 0   # LH 청약 플러스 / 신혼희망타운
+CATEGORY_ANALYSIS_MARGIN     = 0   # 분석 / 안전마진
+CATEGORY_ANALYSIS_SCHEDULE   = 0   # 분석 / 청약 일정
+
+
+def get_category_id(supply_type: str, detail_url: str, housing_source: str) -> int:
+    """공급유형·소스 → 티스토리 서브카테고리 ID 반환. 0이면 미설정(발행 차단)."""
+    is_applyhome = "applyhome.co.kr" in (detail_url or "")
+    is_lh        = not is_applyhome
+
+    # 무순위/줍줍/잔여세대 → 무순위·줍줍
+    if any(k in supply_type for k in ["무순위", "사후", "잔여", "줍줍"]):
+        return CATEGORY_APPLYHOME_UNSOLD
+
+    # 신혼희망타운
+    if "신혼희망타운" in supply_type:
+        return CATEGORY_LH_NEWLYWED if is_lh else CATEGORY_APPLYHOME_SALE
+
+    # LH 공공분양
+    if is_lh and any(k in supply_type for k in ["공공분양", "분양주택", "분양"]):
+        return CATEGORY_LH_PUBLIC
+
+    # 청약홈 민영분양
+    if is_applyhome:
+        return CATEGORY_APPLYHOME_SALE
+
+    # LH 기타 → 공공분양으로
+    if is_lh:
+        return CATEGORY_LH_PUBLIC
+
+    return 0
 
 
 def post_article(page: Page, blog_url: str, title: str, content: str,
-                 thumbnail_file: str = "", category_id: int = 0):
+                 thumbnail_file: str = "", category_id: int = 0, tags: list = None):
     page.goto(f"{blog_url}/manage/newpost/", timeout=20000)
     page.wait_for_load_state("networkidle", timeout=20000)
     page.wait_for_timeout(2000)
@@ -362,7 +431,8 @@ def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id
 
 
 def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Path,
-                           post_id: int = 0, post_title: str = "", post_html: str = ""):
+                           post_id: int = 0, post_title: str = "", post_html: str = "",
+                           tags: list = None):
     """발행된 task의 PDF를 티스토리에 업로드하고 본문 끝에 다운로드 링크를 삽입한다."""
     import requests as _req, re as _re
 
@@ -433,10 +503,11 @@ def _upload_pdf_attachment(page, blog_url: str, context, published_task_path: Pa
         else:
             new_content = pdf_link + post_html
         slogan = _re.sub(r"\s+", "-", _re.sub(r"[^\w\s가-힣]", "", post_title).strip())
+        tag_str = ",".join(tags) if tags else ""
         payload = {
             "id": str(post_id), "title": post_title, "content": new_content,
             "slogan": slogan, "visibility": 20, "category": 0,
-            "tag": "", "acceptComment": 1, "published": 0,
+            "tag": tag_str, "acceptComment": 1, "published": 0,
             "password": "", "uselessMarginForEntry": 1,
             "daumLike": None, "cclCommercial": 0, "cclDerive": 0,
             "type": "post", "attachments": [],
@@ -479,8 +550,9 @@ def run(blog: str):
     task_id = task_file.stem
     print(f"Task: {task_id}")
 
-    title, html = read_draft(task_id, paths["articles_draft"])
+    title, html, tags = read_draft(task_id, paths["articles_draft"])
     print(f"제목: {title}")
+    print(f"태그: {', '.join(tags) if tags else '없음'}")
 
     BROWSER_DATA_DIR.mkdir(exist_ok=True)
 
@@ -525,13 +597,20 @@ def run(blog: str):
                 task_meta = {}
                 for line in task_file.read_text(encoding="utf-8").splitlines():
                     for key in ("notice_name", "region", "housing_category",
-                                "supply_type", "detail_url"):
+                                "supply_type", "detail_url", "housing_source"):
                         if line.startswith(f"{key}:"):
                             task_meta[key] = line.split(":", 1)[1].strip()
 
-                detail_url = task_meta.get("detail_url", "")
-                category_id = (CATEGORY_APPLYHOME if "applyhome.co.kr" in detail_url
-                               else CATEGORY_LH)
+                detail_url   = task_meta.get("detail_url", "")
+                supply_type  = task_meta.get("supply_type", "")
+                housing_src  = task_meta.get("housing_source", "")
+                category_id  = get_category_id(supply_type, detail_url, housing_src)
+
+                # 서브카테고리 ID 없으면 부모 카테고리로 폴백
+                if not category_id:
+                    category_id = (CATEGORY_APPLYHOME if "applyhome.co.kr" in detail_url
+                                   else CATEGORY_LH)
+                    print(f"  ⚠️  서브카테고리 미설정 — 부모 카테고리 사용 (id={category_id})")
 
                 print(f"  🎨 썸네일 생성 중...")
                 img_bytes = generate_thumbnail(task_meta)
@@ -561,8 +640,17 @@ def run(blog: str):
                         )
                         publish_html = img_html + html
 
+            # 발행 전 검증 (llmenginehistory만 적용)
+            if blog == "llmenginehistory":
+                issues = _validate_pre_publish(title, publish_html, tags, category_id)
+                if issues:
+                    reasons = "; ".join(issues)
+                    print(f"❌ 발행 전 검증 실패: {reasons}")
+                    raise RuntimeError(f"검증 실패: {reasons}")
+
             post_id = post_article(page, blog_url, title, publish_html,
-                                   thumbnail_file, category_id=category_id)
+                                   thumbnail_file, category_id=category_id,
+                                   tags=tags)
 
             # 임시 파일 정리
             if thumbnail_file:
@@ -583,7 +671,8 @@ def run(blog: str):
             _upload_pdf_attachment(page, blog_url, context, published_task,
                                    post_id=post_id or 0,
                                    post_title=title,
-                                   post_html=publish_html)
+                                   post_html=publish_html,
+                                   tags=tags)
         except Exception as e:
             shutil.move(str(task_file), str(paths["tasks_failed"] / task_file.name))
             print(f"❌ 발행 실패: {e} → tasks/failed/")

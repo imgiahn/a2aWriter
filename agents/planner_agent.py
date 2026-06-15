@@ -773,6 +773,101 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
     print(f"   다음 단계: python agents/writer_agent.py --blog {blog} --task {out_path} --dry-run")
 
 
+# ─────────────────────────────────────────────
+# 에버그린 (장기 유입용) 개념글 기획
+# ─────────────────────────────────────────────
+
+EVERGREEN_TOPICS = [
+    ("무순위 청약 줍줍 조건 총정리 2026년 기준", "개념정리"),
+    ("신혼희망타운 소득기준 2026년 완벽 정리", "개념정리"),
+    ("공공분양 재당첨 제한 10년 완벽 정리", "개념정리"),
+    ("전매제한 3년이면 언제 팔 수 있을까", "개념정리"),
+    ("거주의무 5년 뜻과 위반 시 주의사항", "개념정리"),
+    ("청약홈 무순위 사후접수 신청 방법 총정리", "개념정리"),
+    ("특별공급과 일반공급 차이 완벽 정리", "개념정리"),
+    ("생애최초 특별공급 조건 2026년 기준", "개념정리"),
+    ("신혼부부 특별공급 소득기준 총정리", "개념정리"),
+    ("청약통장 납입횟수 기준 완벽 정리", "개념정리"),
+    ("분양가상한제 뜻과 적용 아파트 확인 방법", "개념정리"),
+    ("청약 1순위 조건 총정리 2026년 기준", "개념정리"),
+    ("가점제 vs 추첨제 차이와 유리한 청약 전략", "개념정리"),
+    ("민영분양 HUG 보증금 대출 조건 총정리", "개념정리"),
+    ("분양권 전매 절차와 주의사항 완벽 정리", "개념정리"),
+]
+
+
+def evergreen_run(paths: dict):
+    """에버그린 개념글 Task 생성 (주 3회, 기존 planned가 적을 때 자동 생성)."""
+    planned_count = len(list(paths["planned"].glob("*.md")))
+    if planned_count >= 3:
+        print(f"⏸  planned {planned_count}개 — 에버그린 생성 불필요")
+        return
+
+    # 기존 발행/기획된 에버그린 주제 수집
+    existing_topics = set()
+    for folder in ("planned", "writing", "published", "failed"):
+        folder_path = Path(f"blogs/llmenginehistory/tasks/{folder}")
+        if not folder_path.exists():
+            continue
+        for f in folder_path.glob("*.md"):
+            text = f.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if line.startswith("topic:"):
+                    existing_topics.add(line.split(":", 1)[1].strip())
+                elif line.startswith("notice_name:"):
+                    existing_topics.add(line.split(":", 1)[1].strip())
+
+    # 아직 작성 안 한 주제 선택
+    remaining = [(t, s) for t, s in EVERGREEN_TOPICS if t not in existing_topics]
+    if not remaining:
+        print("⏸  에버그린 주제 소진 — 새 주제 추가 필요")
+        return
+
+    topic, series = remaining[0]
+    task_id = get_next_task_id(paths["planned"])
+
+    outline = f"""## 기획 의도
+네이버 검색 유입을 위한 장기 유효 개념 정리 글.
+"{topic}" 키워드로 검색하는 청약 준비 독자를 대상으로,
+핵심 정보를 판단 중심으로 정리.
+
+## 구성안
+- 1단락: 핵심 결론 (검색자가 가장 궁금한 답)
+- 2단락: 상세 조건 및 계산 방법
+- 3단락: 실전 예시 (서울/경기 사례)
+- 4단락: 주의사항 및 자주 묻는 질문
+
+## 핵심 포인트
+독자가 "나는 해당이 되나?"를 바로 판단할 수 있어야 함.
+분양가·청약일정·전매제한 관련 키워드 제목에 포함."""
+
+    folder = paths["planned"]
+    folder.mkdir(parents=True, exist_ok=True)
+    content = f"""---
+task_id: {task_id}
+status: planned
+topic: {topic}
+series: {series}
+priority: medium
+template: evergreen
+type: 단편
+parts: 1
+created_by: planner_agent
+created_at: {date.today().isoformat()}
+housing_source: 에버그린
+supply_type: 개념정리
+region: 서울경기인천
+---
+
+# 콘텐츠 개요
+
+{outline}
+"""
+    path = folder / f"{task_id}.md"
+    path.write_text(content, encoding="utf-8")
+    print(f"  📚 에버그린 Task 생성: {task_id} — {topic}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--blog",      required=True, help="블로그 이름")
@@ -780,6 +875,7 @@ if __name__ == "__main__":
     parser.add_argument("--source",    default="lh", choices=["lh", "applyhome"], help="수집 소스 (기본: lh)")
     parser.add_argument("--notice-id", dest="notice_id", help="[개발] 공고번호 1건만 처리 → tasks/test/ 저장")
     parser.add_argument("--mi",        default="1026", help="[개발] LH 목록 mi 값 (1026=임대, 1027=분양)")
+    parser.add_argument("--evergreen", action="store_true", help="에버그린 개념글 Task 생성")
     args = parser.parse_args()
 
     if args.notice_id:
@@ -794,10 +890,14 @@ if __name__ == "__main__":
         else:
             mbti_run(paths)
     elif args.blog == "llmenginehistory":
-        if args.source == "applyhome":
+        if args.evergreen:
+            evergreen_run(paths)
+        elif args.source == "applyhome":
             applyhome_run(paths)
+            evergreen_run(paths)  # 공고 수집 후 에버그린도 체크
         else:
             cheongyak_run(paths)
+            evergreen_run(paths)  # 공고 수집 후 에버그린도 체크
     else:
         print(f"❌ 알 수 없는 블로그: {args.blog}")
         sys.exit(1)
