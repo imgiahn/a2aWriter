@@ -597,7 +597,7 @@ def run(blog: str):
                 task_meta = {}
                 for line in task_file.read_text(encoding="utf-8").splitlines():
                     for key in ("notice_name", "region", "housing_category",
-                                "supply_type", "detail_url", "housing_source"):
+                                "supply_type", "detail_url", "housing_source", "template"):
                         if line.startswith(f"{key}:"):
                             task_meta[key] = line.split(":", 1)[1].strip()
 
@@ -640,8 +640,9 @@ def run(blog: str):
                         )
                         publish_html = img_html + html
 
-            # 발행 전 검증 (llmenginehistory만 적용)
-            if blog == "llmenginehistory":
+            # 발행 전 검증 (llmenginehistory 공고글만 적용, 에버그린 제외)
+            is_evergreen = task_meta.get("template", "") == "evergreen" if blog == "llmenginehistory" else False
+            if blog == "llmenginehistory" and not is_evergreen:
                 issues = _validate_pre_publish(title, publish_html, tags, category_id)
                 if issues:
                     reasons = "; ".join(issues)
