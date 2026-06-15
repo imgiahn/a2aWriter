@@ -261,14 +261,29 @@ def post_article(page: Page, blog_url: str, title: str, content: str,
     page.evaluate("document.getElementById('publish-btn').click()")
     page.wait_for_timeout(3000)
 
-    # 발행 후 URL에서 post_id 추출 (쿼리 파라미터 제거 후 확인)
-    url_clean = page.url.split("?")[0]
-    m = re.search(r"/(\d+)$", url_clean)
-    if not m:
-        page.wait_for_timeout(2000)
-        url_clean = page.url.split("?")[0]
+    # 발행 후 URL에서 post_id 추출
+    # Tistory 에디터는 발행 후 URL이 여러 패턴으로 나타남:
+    #   /manage/newpost/123?type=post  → path에 숫자
+    #   /manage/newpost/?postId=123    → 쿼리파라미터에 숫자
+    def _extract_post_id(url: str):
+        url_clean = url.split("?")[0]
         m = re.search(r"/(\d+)$", url_clean)
-    return int(m.group(1)) if m else None
+        if m:
+            return int(m.group(1))
+        m = re.search(r"[?&]postId=(\d+)", url)
+        if m:
+            return int(m.group(1))
+        return None
+
+    url = page.url
+    print(f"  🔍 발행 후 URL: {url}")
+    post_id = _extract_post_id(url)
+    if not post_id:
+        page.wait_for_timeout(2000)
+        url = page.url
+        print(f"  🔍 발행 후 URL(재시도): {url}")
+        post_id = _extract_post_id(url)
+    return post_id
 
 
 def _generate_and_set_thumbnail(blog_url: str, context, task_path: Path, post_id: int, title: str):
