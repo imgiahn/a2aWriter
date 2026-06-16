@@ -777,30 +777,151 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
 # startupgrantnote 전용 로직 (K-Startup 창업지원사업 공고 분석)
 # ─────────────────────────────────────────────
 
+def _fmt_dt(s):
+    """YYYYMMDD → YYYY.MM.DD"""
+    if s and len(s) == 8:
+        return "{}.{}.{}".format(s[:4], s[4:6], s[6:])
+    return s
+
+
+def _write_kstartup_task(folder, task_id, item):
+    folder.mkdir(parents=True, exist_ok=True)
+    notice_name    = item.get("notice_name", "")
+    region         = item.get("region", "")
+    org_name       = item.get("org_name", "")
+    biz_enyy       = item.get("biz_enyy", "")
+    apply_start    = _fmt_dt(item.get("apply_start", ""))
+    apply_end      = _fmt_dt(item.get("apply_end", ""))
+    detail_url     = item.get("detail_url", "")
+    apply_url      = item.get("apply_url", "")
+    content        = item.get("content", "")[:2000]
+    apply_target   = item.get("apply_target", "")[:1000]
+    exclude_target = item.get("exclude_target", "")[:500]
+    startup_cat    = item.get("startup_category", "창업지원금가이드")
+
+    text = """---
+task_id: {task_id}
+status: planned
+topic: {notice_name} 분석
+series: K-Startup공고분석
+priority: {priority}
+template: kstartup
+type: 단편
+parts: 1
+notice_id: {notice_id}
+notice_name: {notice_name}
+supply_type: {supply_type}
+region: {region}
+org_name: {org_name}
+apply_start: {apply_start}
+apply_end: {apply_end}
+biz_enyy: {biz_enyy}
+detail_url: {detail_url}
+apply_url: {apply_url}
+startup_category: {startup_cat}
+created_by: planner_agent
+created_at: {created_at}
+---
+
+# 기획 의도
+
+K-Startup 창업지원사업 공고를 예비창업자/초기창업자 입장에서 해석한다.
+공고 원문을 복사하지 말고, 지원 여부 판단에 도움이 되는 분석 글을 작성한다.
+
+## 공고 기본 정보
+
+| 항목 | 내용 |
+|------|------|
+| 사업명 | {notice_name} |
+| 주관기관 | {org_name} |
+| 지원지역 | {region} |
+| 지원대상 (창업업력) | {biz_enyy} |
+| 신청기간 | {apply_start} ~ {apply_end} |
+| 공고 원문 | {detail_url} |
+| 신청 URL | {apply_url} |
+
+## 공고 내용
+
+{content}
+
+## 신청 대상
+
+{apply_target}
+
+## 신청 제외 대상
+
+{exclude_target}
+""".format(
+        task_id=task_id,
+        notice_id=item.get("notice_id", ""),
+        notice_name=notice_name,
+        supply_type=item.get("supply_type", "사업화"),
+        region=region,
+        org_name=org_name,
+        apply_start=apply_start,
+        apply_end=apply_end,
+        biz_enyy=biz_enyy,
+        detail_url=detail_url,
+        apply_url=apply_url,
+        startup_cat=startup_cat,
+        priority=item.get("priority", "high"),
+        created_at=date.today().isoformat(),
+        content=content,
+        apply_target=apply_target,
+        exclude_target=exclude_target,
+    )
+    (folder / "{}.md".format(task_id)).write_text(text, encoding="utf-8")
+
+
 def startupgrantnote_run(paths: dict):
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from tools.kstartup_scraper import scrape_notices
+
     print("=" * 50)
-    print("Planner Agent - startupgrantnote")
+    print("Planner Agent - startupgrantnote (K-Startup)")
     print("=" * 50)
 
+    existing_ids    = get_existing_notice_ids("startupgrantnote")
     planned_count   = len(list(paths["planned"].glob("*.md")))
     published_count = len(list(paths["published"].glob("*.md")))
-    print(f"발행 완료: {published_count}개 | 대기 중: {planned_count}개")
-    print()
-    print("[TODO] K-Startup 자동 수집 미구현 (수동 task 모드)")
-    print()
-    print("TODO:")
-    print("  - K-Startup OpenAPI 연동")
-    print("  - K-Startup 공고 목록 자동 수집")
-    print("  - 마감일 기준 필터링")
-    print("  - 마감 임박 공고 우선순위 정렬")
-    print("  - 사업분야별 카테고리 자동 분류")
-    print("  - 예비창업자/초기창업자/AI 스타트업 등 지원자 유형 자동 매칭")
-    print("  - 공고 첨부파일 PDF 분석")
-    print("  - 사업계획서 작성 포인트 자동 추출")
-    print()
-    print(f"현재 수동 planned task: {planned_count}개")
-    if planned_count > 0:
-        print("writer_agent.py --blog startupgrantnote 를 실행해 글을 생성하세요.")
+    print("기존 처리 공고: {}건 | 발행완료: {}개 | 대기중: {}개".format(
+        len(existing_ids), published_count, planned_count))
+    print("K-Startup 사업화 공고 수집 중 (서울/경기/전국)...")
+
+    announcements = scrape_notices(max_pages=5, per_page=100)
+    if not announcements:
+        print("수집된 공고 없음")
+        return
+
+    print("수집: {}건 (사업화 + 서울/경기/전국 필터)".format(len(announcements)))
+
+    created = 0
+    for item in announcements:
+        notice_id   = item.get("notice_id", "")
+        notice_name = item.get("notice_name", "")
+        if not notice_name:
+            continue
+        if ((notice_id and notice_id in existing_ids)
+                or (notice_name and notice_name in existing_ids)):
+            print("  스킵 (중복): {}".format(notice_name[:40]))
+            continue
+
+        task_id = get_next_task_id(paths["planned"])
+        _write_kstartup_task(paths["planned"], task_id, item)
+        print("  Task 생성: [{}] {} → {}".format(
+            item.get("region", ""), notice_name[:40], item.get("startup_category", "")))
+
+        if notice_id:
+            existing_ids.add(notice_id)
+        if notice_name:
+            existing_ids.add(notice_name)
+        created += 1
+
+    if created == 0:
+        print("새 공고 없음 (모두 기존 Task 존재)")
+    else:
+        print("\n완료: {}개 Task 생성".format(created))
 
 
 if __name__ == "__main__":

@@ -621,6 +621,78 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     return title, html
 
 
+def generate_kstartup_content(task: dict, writing_guide: Path) -> tuple:
+    """K-Startup 창업지원사업 공고 분석 글 생성."""
+    notice_name  = task.get("notice_name", task.get("topic", ""))
+    region       = task.get("region", "")
+    org_name     = task.get("org_name", "")
+    apply_start  = task.get("apply_start", "")
+    apply_end    = task.get("apply_end", "")
+    biz_enyy     = task.get("biz_enyy", "")
+    detail_url   = task.get("detail_url", "")
+    apply_url    = task.get("apply_url", "")
+    body         = task.get("_body", "")
+    guide        = writing_guide.read_text(encoding="utf-8") if writing_guide.exists() else ""
+
+    system_prompt = (
+        "당신은 창업지원사업 공고를 예비창업자·초기창업자 입장에서 해석하는 블로그 작가입니다.\n"
+        "아래 작성 가이드를 반드시 따라 HTML 형식으로만 출력합니다.\n\n"
+        + guide
+    )
+
+    user_prompt = """아래 K-Startup 창업지원사업 공고를 분석하는 블로그 글을 HTML로 작성하세요.
+
+공고명: {notice_name}
+주관기관: {org_name}
+지원지역: {region}
+신청기간: {apply_start} ~ {apply_end}
+지원대상(창업업력): {biz_enyy}
+공고 원문: {detail_url}
+신청 URL: {apply_url}
+
+공고 상세:
+{body}
+
+---
+
+맨 첫 줄: <!-- TITLE: [SEO 제목] -->
+- 공고명을 그대로 쓰지 말고 검색 의도에 맞는 제목 작성
+- 예: "[지원금 분석] {notice_name_short}, 예비창업자도 신청 가능할까?"
+- 제목에 "창업지원금", "K-Startup", "예비창업자", "초기창업자" 중 1~2개 자연스럽게 포함
+
+이후 writing_guide 섹션 순서대로 HTML 본문 작성.
+공고 데이터에 없는 내용은 추측하지 말고 해당 항목 생략.""".format(
+        notice_name=notice_name,
+        notice_name_short=notice_name[:30],
+        org_name=org_name,
+        region=region,
+        apply_start=apply_start,
+        apply_end=apply_end,
+        biz_enyy=biz_enyy,
+        detail_url=detail_url,
+        apply_url=apply_url,
+        body=body[:3000],
+    )
+
+    resp = azure_client.chat.completions.create(
+        model=DEPLOYMENT,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        temperature=0.75,
+        max_completion_tokens=3500,
+        timeout=90,
+    )
+    raw = resp.choices[0].message.content.strip()
+
+    m     = re.search(r"<!--\s*TITLE:\s*(.+?)\s*-->", raw)
+    title = m.group(1).strip() if m else notice_name
+    html  = re.sub(r"<!--\s*TITLE:\s*.+?\s*-->\n?", "", raw)
+
+    return title, html
+
+
 def generate_content(task: dict, writing_guide: Path) -> tuple:
     topic    = task.get("topic", "")
     series   = task.get("series", "")
@@ -711,6 +783,8 @@ def run(blog: str, task_file: Optional[Path] = None, dry_run: bool = False):
     # 블로그별 글 생성 분기
     if blog == "llmenginehistory":
         title, html = generate_lh_content(task, paths["writing_guide"])
+    elif blog == "startupgrantnote":
+        title, html = generate_kstartup_content(task, paths["writing_guide"])
     else:
         title, html = generate_content(task, paths["writing_guide"])
 
