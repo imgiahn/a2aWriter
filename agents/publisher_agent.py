@@ -175,6 +175,14 @@ def reauth(pw, blog_url: str) -> Optional[BrowserContext]:
 CATEGORY_LH          = 1311445   # LH 청약 플러스
 CATEGORY_APPLYHOME   = 1311446   # 청약 Home
 
+# startupgrantnote 카테고리
+CATEGORY_STARTUP = {
+    "예비창업자":      843635,
+    "초기창업자":      843636,
+    "도약기창업자":    843637,
+    "창업지원금가이드": 843638,
+}
+
 
 def post_article(page: Page, blog_url: str, title: str, content: str,
                  thumbnail_file: str = "", category_id: int = 0):
@@ -517,7 +525,17 @@ def run(blog: str):
             # → CDN 업로드 후 html 앞에 삽입 (본문 상단 이미지용)
             category_id = 0
             thumbnail_file = ""
-            if blog == "llmenginehistory":
+            if blog == "startupgrantnote":
+                # task에서 startup_category 필드 읽어 카테고리 ID 결정
+                startup_cat = ""
+                for line in task_file.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("startup_category:"):
+                        startup_cat = line.split(":", 1)[1].strip()
+                        break
+                category_id = CATEGORY_STARTUP.get(startup_cat, CATEGORY_STARTUP["창업지원금가이드"])
+                print(f"  카테고리: {startup_cat or '창업지원금가이드'} (id={category_id})")
+
+            elif blog == "llmenginehistory":
                 import sys as _sys, os as _os, tempfile as _tmp
                 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
                 from tools.thumbnail_gen import generate_thumbnail, upload_thumbnail_to_tistory
