@@ -773,6 +773,36 @@ def dev_single_notice(blog: str, notice_id: str, mi: str = "1026"):
     print(f"   다음 단계: python agents/writer_agent.py --blog {blog} --task {out_path} --dry-run")
 
 
+# ─────────────────────────────────────────────
+# startupgrantnote 전용 로직 (K-Startup 창업지원사업 공고 분석)
+# ─────────────────────────────────────────────
+
+def startupgrantnote_run(paths: dict):
+    print("=" * 50)
+    print("Planner Agent - startupgrantnote")
+    print("=" * 50)
+
+    planned_count   = len(list(paths["planned"].glob("*.md")))
+    published_count = len(list(paths["published"].glob("*.md")))
+    print(f"발행 완료: {published_count}개 | 대기 중: {planned_count}개")
+    print()
+    print("[TODO] K-Startup 자동 수집 미구현 (수동 task 모드)")
+    print()
+    print("TODO:")
+    print("  - K-Startup OpenAPI 연동")
+    print("  - K-Startup 공고 목록 자동 수집")
+    print("  - 마감일 기준 필터링")
+    print("  - 마감 임박 공고 우선순위 정렬")
+    print("  - 사업분야별 카테고리 자동 분류")
+    print("  - 예비창업자/초기창업자/AI 스타트업 등 지원자 유형 자동 매칭")
+    print("  - 공고 첨부파일 PDF 분석")
+    print("  - 사업계획서 작성 포인트 자동 추출")
+    print()
+    print(f"현재 수동 planned task: {planned_count}개")
+    if planned_count > 0:
+        print("writer_agent.py --blog startupgrantnote 를 실행해 글을 생성하세요.")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--blog",      required=True, help="블로그 이름")
@@ -798,6 +828,8 @@ if __name__ == "__main__":
             applyhome_run(paths)
         else:
             cheongyak_run(paths)
+    elif args.blog == "startupgrantnote":
+        startupgrantnote_run(paths)
     else:
         print(f"❌ 알 수 없는 블로그: {args.blog}")
         sys.exit(1)
