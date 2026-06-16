@@ -621,57 +621,123 @@ def generate_lh_content(task: dict, writing_guide: Path) -> tuple:
     return title, html
 
 
+_PDF_KEY_SECTIONS = [
+    "지원내용", "지원금액", "지원규모", "지원혜택",
+    "선정기준", "평가방법", "선정절차",
+    "신청자격", "지원대상", "신청 자격",
+    "제출서류", "제출 서류", "신청방법",
+    "사업개요", "사업 개요",
+]
+
+_CAT_LABEL = {
+    "예비창업자":       "예비창업자",
+    "초기창업자":       "초기창업자",
+    "도약기창업자":     "창업 3~7년차",
+    "창업지원금가이드": "창업자",
+}
+
+
+def _extract_body_section(body: str, header: str) -> str:
+    """task body에서 ## {header} 섹션 내용 추출."""
+    m = re.search(r"## " + re.escape(header) + r"\n(.*?)(?=\n## |\Z)", body, re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
+def _filter_pdf_key(pdf_text: str, max_chars: int = 2000) -> str:
+    """PDF 텍스트에서 지원내용·선정기준·제출서류 위주 섹션만 추출."""
+    if not pdf_text:
+        return ""
+    lines  = pdf_text.splitlines()
+    result = []
+    chars  = 0
+    in_key = False
+
+    for line in lines:
+        if chars >= max_chars:
+            break
+        if any(kw in line for kw in _PDF_KEY_SECTIONS):
+            in_key = True
+        if in_key:
+            result.append(line)
+            chars += len(line)
+
+    return "\n".join(result)[:max_chars] if result else pdf_text[:max_chars]
+
+
 def generate_kstartup_content(task: dict, writing_guide: Path) -> tuple:
     """K-Startup 창업지원사업 공고 분석 글 생성."""
-    notice_name  = task.get("notice_name", task.get("topic", ""))
-    region       = task.get("region", "")
-    org_name     = task.get("org_name", "")
-    apply_start  = task.get("apply_start", "")
-    apply_end    = task.get("apply_end", "")
-    biz_enyy     = task.get("biz_enyy", "")
-    detail_url   = task.get("detail_url", "")
-    apply_url    = task.get("apply_url", "")
-    body         = task.get("_body", "")
-    guide        = writing_guide.read_text(encoding="utf-8") if writing_guide.exists() else ""
+    notice_name = task.get("notice_name", task.get("topic", ""))
+    region      = task.get("region", "")
+    org_name    = task.get("org_name", "")
+    apply_start = task.get("apply_start", "")
+    apply_end   = task.get("apply_end", "")
+    biz_enyy    = task.get("biz_enyy", "")
+    detail_url  = task.get("detail_url", "")
+    startup_cat = task.get("startup_category", "창업지원금가이드")
+    body        = task.get("_body", "")
+    guide       = writing_guide.read_text(encoding="utf-8") if writing_guide.exists() else ""
+
+    # 지역·대상 레이블
+    region_short = (region.replace("특별시", "").replace("광역시", "")
+                    .replace("특별자치시", "").replace("도", "").strip() or "전국")
+    cat_label    = _CAT_LABEL.get(startup_cat, "창업자")
+
+    # body에서 섹션별 추출
+    detail_text = _extract_body_section(body, "공고 내용")[:1500]
+    apply_tgt   = _extract_body_section(body, "신청 대상")[:400]
+    excl_tgt    = _extract_body_section(body, "신청 제외 대상")[:200]
+    raw_pdf     = _extract_body_section(body, "공고문 PDF 원문")
+    pdf_focused = _filter_pdf_key(raw_pdf, max_chars=2000)
 
     system_prompt = (
-        "당신은 창업지원사업 공고를 예비창업자·초기창업자 입장에서 해석하는 블로그 작가입니다.\n"
+        "당신은 창업지원사업 공고를 창업자 입장에서 해석하는 블로그 작가입니다.\n"
+        "공고 원문에 명시된 사실만 씁니다. 금액·조건·기간이 원문에 없으면 절대 추측하지 않습니다.\n"
         "아래 작성 가이드를 반드시 따라 HTML 형식으로만 출력합니다.\n\n"
         + guide
     )
 
-    user_prompt = """아래 K-Startup 창업지원사업 공고를 분석하는 블로그 글을 HTML로 작성하세요.
-
-공고명: {notice_name}
-주관기관: {org_name}
-지원지역: {region}
-신청기간: {apply_start} ~ {apply_end}
-지원대상(창업업력): {biz_enyy}
-공고 원문: {detail_url}
-신청 URL: {apply_url}
-
-공고 상세:
-{body}
-
----
-
-맨 첫 줄: <!-- TITLE: [SEO 제목] -->
-- 공고명을 그대로 쓰지 말고 검색 의도에 맞는 제목 작성
-- 예: "[지원금 분석] {notice_name_short}, 예비창업자도 신청 가능할까?"
-- 제목에 "창업지원금", "K-Startup", "예비창업자", "초기창업자" 중 1~2개 자연스럽게 포함
-
-이후 writing_guide 섹션 순서대로 HTML 본문 작성.
-공고 데이터에 없는 내용은 추측하지 말고 해당 항목 생략.""".format(
+    user_prompt = (
+        "아래 K-Startup 창업지원사업 공고를 분석하는 블로그 글을 HTML로 작성하세요.\n\n"
+        "=== 공고 기본 정보 ===\n"
+        "공고명: {notice_name}\n"
+        "주관기관: {org_name}\n"
+        "지원지역: {region}\n"
+        "신청기간: {apply_start} ~ {apply_end}\n"
+        "지원대상(창업업력): {biz_enyy}\n"
+        "공고 원문: {detail_url}\n\n"
+        "=== 상세 페이지 내용 ===\n"
+        "{detail_text}\n\n"
+        "=== 신청 대상 ===\n"
+        "{apply_tgt}\n\n"
+        "=== 제외 대상 ===\n"
+        "{excl_tgt}\n\n"
+        "=== 공고문 PDF (지원내용·선정기준·제출서류 위주) ===\n"
+        "{pdf_focused}\n\n"
+        "---\n\n"
+        "맨 첫 줄: <!-- TITLE: [SEO 제목] -->\n\n"
+        "제목 규칙 (필수):\n"
+        "- 지역 '{region_short}'와 대상 '{cat_label}'을 반드시 제목에 포함\n"
+        "- 형식 예: [{region_short} {cat_label}] {name_short} 신청 전 체크포인트\n"
+        "- 형식 예: {region_short} {cat_label}이 지원하면 유리한 {name_short} 분석\n"
+        "- 공고명은 줄여도 됨. 제목 전체 50자 이내 권장\n"
+        "- '창업지원금' 또는 'K-Startup' 중 1개 자연스럽게 포함\n\n"
+        "이후 writing_guide 섹션 순서대로 HTML 본문 작성.\n"
+        "원문에 없는 금액·선정 인원·지원 규모는 절대 추측하지 말고 해당 항목 생략."
+    ).format(
         notice_name=notice_name,
-        notice_name_short=notice_name[:30],
+        name_short=notice_name[:22],
         org_name=org_name,
         region=region,
+        region_short=region_short,
         apply_start=apply_start,
         apply_end=apply_end,
         biz_enyy=biz_enyy,
         detail_url=detail_url,
-        apply_url=apply_url,
-        body=body[:3000],
+        cat_label=cat_label,
+        detail_text=detail_text,
+        apply_tgt=apply_tgt,
+        excl_tgt=excl_tgt,
+        pdf_focused=pdf_focused,
     )
 
     resp = azure_client.chat.completions.create(
