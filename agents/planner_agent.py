@@ -794,9 +794,12 @@ def _write_kstartup_task(folder, task_id, item):
     apply_end      = _fmt_dt(item.get("apply_end", ""))
     detail_url     = item.get("detail_url", "")
     apply_url      = item.get("apply_url", "")
-    content        = item.get("content", "")[:2000]
-    apply_target   = item.get("apply_target", "")[:1000]
-    exclude_target = item.get("exclude_target", "")[:500]
+    # 상세 페이지 텍스트 우선, 없으면 API 필드 fallback
+    detail_text    = item.get("detail_text", "")
+    pdf_text       = item.get("pdf_text", "")
+    content        = (detail_text or item.get("content", ""))[:3000]
+    apply_target   = item.get("apply_target", "")[:500]
+    exclude_target = item.get("exclude_target", "")[:300]
     startup_cat    = item.get("startup_category", "창업지원금가이드")
 
     text = """---
@@ -851,6 +854,8 @@ K-Startup 창업지원사업 공고를 예비창업자/초기창업자 입장에
 ## 신청 제외 대상
 
 {exclude_target}
+
+{pdf_section}
 """.format(
         task_id=task_id,
         notice_id=item.get("notice_id", ""),
@@ -869,6 +874,7 @@ K-Startup 창업지원사업 공고를 예비창업자/초기창업자 입장에
         content=content,
         apply_target=apply_target,
         exclude_target=exclude_target,
+        pdf_section=("## 공고문 PDF 원문\n\n```\n" + pdf_text[:4000] + "\n```") if pdf_text else "",
     )
     (folder / "{}.md".format(task_id)).write_text(text, encoding="utf-8")
 
@@ -876,7 +882,7 @@ K-Startup 창업지원사업 공고를 예비창업자/초기창업자 입장에
 def startupgrantnote_run(paths: dict):
     import sys as _sys, os as _os
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-    from tools.kstartup_scraper import scrape_notices
+    from tools.kstartup_scraper import scrape_notices, fetch_detail
 
     print("=" * 50)
     print("Planner Agent - startupgrantnote (K-Startup)")
@@ -906,6 +912,15 @@ def startupgrantnote_run(paths: dict):
                 or (notice_name and notice_name in existing_ids)):
             print("  스킵 (중복): {}".format(notice_name[:40]))
             continue
+
+        # 상세 페이지 크롤링 + 첨부파일 다운로드
+        detail_url = item.get("detail_url", "")
+        print("  상세 수집 중: {}...".format(notice_name[:35]))
+        detail = fetch_detail(detail_url)
+        item["detail_text"] = detail["text"]
+        item["pdf_text"]    = detail["pdf_text"]
+        item["pdf_bytes"]   = detail["pdf_bytes"]
+        item["pdf_filename"] = detail["pdf_filename"]
 
         task_id = get_next_task_id(paths["planned"])
         _write_kstartup_task(paths["planned"], task_id, item)

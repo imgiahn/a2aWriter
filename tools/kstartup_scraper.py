@@ -5,9 +5,18 @@ tools/kstartup_scraper.py — K-Startup 창업지원사업 OpenAPI 스크래퍼
 API: https://nidapi.k-startup.go.kr/api/kisedKstartupService/v1/getAnnouncementInformation
 """
 
+import re
 import requests
 from datetime import date, datetime
 from xml.etree import ElementTree as ET
+
+try:
+    from bs4 import BeautifulSoup
+    _BS4 = True
+except ImportError:
+    _BS4 = False
+
+KSTARTUP_BASE = "https://www.k-startup.go.kr"
 
 KSTARTUP_API = (
     "https://nidapi.k-startup.go.kr/api/kisedKstartupService/v1"
@@ -129,3 +138,136 @@ def scrape_notices(max_pages=5, per_page=100):
             break
 
     return results
+
+
+# ─────────────────────────────────────────────
+# 상세 페이지 크롤링 + 첨부파일 다운로드
+# ─────────────────────────────────────────────
+
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer":    KSTARTUP_BASE,
+}
+
+_SECTION_KW = ["신청방법", "신청기간", "신청대상", "제출서류", "선정절차", "지원내용",
+               "지원금액", "지원규모", "평가방법", "우대사항", "문의처"]
+
+
+def _decode_filename(cd_header):
+    """Content-Disposition filename 인코딩 처리 (EUC-KR → UTF-8)."""
+    m = re.search(r'filename="([^"]+)"', cd_header)
+    if not m:
+        return "공고문.pdf"
+    raw = m.group(1)
+    try:
+        return raw.encode("latin-1").decode("euc-kr")
+    except Exception:
+        return raw
+
+
+def _extract_detail_text(html):
+    """상세 페이지 HTML에서 공고 본문 텍스트 추출."""
+    if not _BS4:
+        return ""
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(separator="\n", strip=True)
+    lines = [l for l in text.splitlines() if l.strip()]
+
+    # 본문 시작점: 신청방법/지원내용/모집공고 키워드 직전 10줄부터
+    start = 0
+    for i, line in enumerate(lines):
+        if any(kw in line for kw in _SECTION_KW):
+            start = max(0, i - 5)
+            break
+
+    # 문의처 이후는 불필요한 footer
+    end = len(lines)
+    for i, line in enumerate(lines[start:], start):
+        if "K-Startup사업공고" in line or "기업(기관)정보" in line:
+            end = i
+            break
+
+    return "\n".join(lines[start:end])
+
+
+def _find_file_links(html):
+    """상세 페이지에서 첨부파일 다운로드 URL 목록 반환."""
+    if not _BS4:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    links = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "fileDownload" in href:
+            url = KSTARTUP_BASE + href if href.startswith("/") else href
+            links.append(url)
+    return links
+
+
+def fetch_detail(detail_url):
+    """K-Startup 공고 상세 페이지 크롤링 + 첨부 PDF 다운로드.
+
+    반환:
+        {
+            "text":         상세 페이지 본문 텍스트,
+            "pdf_text":     PDF에서 추출한 전체 텍스트,
+            "pdf_bytes":    첫 번째 PDF bytes (없으면 b""),
+            "pdf_filename": PDF 파일명,
+        }
+    """
+    result = {"text": "", "pdf_text": "", "pdf_bytes": b"", "pdf_filename": ""}
+
+    if not detail_url:
+        return result
+
+    # 상세 페이지 크롤링
+    try:
+        r = requests.get(detail_url, headers=_HEADERS, timeout=15)
+        r.raise_for_status()
+    except Exception as e:
+        print("    상세 페이지 수집 실패: {}".format(e))
+        return result
+
+    result["text"] = _extract_detail_text(r.text)
+
+    # 첨부파일 다운로드
+    for file_url in _find_file_links(r.text):
+        try:
+            fr = requests.get(file_url, headers=_HEADERS, timeout=30)
+            if fr.status_code != 200:
+                continue
+            filename = _decode_filename(fr.headers.get("Content-Disposition", ""))
+            content  = fr.content
+
+            # 첫 번째 PDF만 파싱 (이후 파일은 건너뜀)
+            if not result["pdf_bytes"] and (
+                filename.lower().endswith(".pdf")
+                or "pdf" in fr.headers.get("Content-Type", "").lower()
+            ):
+                result["pdf_bytes"]   = content
+                result["pdf_filename"] = filename
+                result["pdf_text"]    = _extract_pdf_text(content)
+                print("    PDF 첨부: {} ({:,}자)".format(filename[:40], len(result["pdf_text"])))
+        except Exception as e:
+            print("    파일 다운로드 실패: {}".format(e))
+
+    return result
+
+
+def _extract_pdf_text(pdf_bytes):
+    """PDF bytes에서 전체 텍스트 추출 (pdfplumber 사용)."""
+    if not pdf_bytes:
+        return ""
+    try:
+        import io
+        import pdfplumber
+        texts = []
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    texts.append(t)
+        return "\n".join(texts)
+    except Exception as e:
+        print("    PDF 텍스트 추출 실패: {}".format(e))
+        return ""
