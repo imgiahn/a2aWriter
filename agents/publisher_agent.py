@@ -174,6 +174,9 @@ def reauth(pw, blog_url: str) -> Optional[BrowserContext]:
 
 CATEGORY_LH          = 1311445   # LH 청약 플러스
 CATEGORY_APPLYHOME   = 1311446   # 청약 Home
+CATEGORY_LH_TIPS     = 1312198   # 필수 청약 지식
+
+CATEGORY_MBTI        = 1167313   # MBTI별 썸+짝사랑 분석
 
 # startupgrantnote 카테고리
 CATEGORY_STARTUP = {
@@ -525,7 +528,10 @@ def run(blog: str):
             # → CDN 업로드 후 html 앞에 삽입 (본문 상단 이미지용)
             category_id = 0
             thumbnail_file = ""
-            if blog == "startupgrantnote":
+            if blog == "mbtireallove":
+                category_id = CATEGORY_MBTI
+
+            elif blog == "startupgrantnote":
                 # task에서 startup_category 필드 읽어 카테고리 ID 결정
                 startup_cat = ""
                 for line in task_file.read_text(encoding="utf-8").splitlines():
