@@ -6189,3 +6189,41 @@ K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
   스킵 (중복): [포스텍홀딩스] TIPS 갈 팀, 지금 찾습니다.
 
 완료: 2개 Task 생성
+[main f0087ad] auto: 2026-06-18 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 3 files changed, 504 insertions(+)
+ create mode 100644 blogs/startupgrantnote/tasks/planned/20260618_001.md
+ create mode 100644 blogs/startupgrantnote/tasks/planned/20260618_002.md
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+  [청약홈/APT분양/서울] 1p: 1건
+  [청약홈/APT분양/경기] 1p: 2건
+  [청약홈/APT분양/인천] 1p: 2건
+  [청약홈/오피스텔/도시형/서울] 1p: 5건
+  [청약홈/오피스텔/도시형/경기] 1p: 1건
+  [청약홈/APT잔여세대/서울] 1p: 2건
+  [청약홈/APT잔여세대/경기] 1p: 2건
+  [청약홈/APT잔여세대/인천] 1p: 3건
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Planner Agent — mbtireallove (반자동 모드)
+==================================================
+발행 완료: 84개 | 대기 중: 6개
+⏸  planned 6개 — 추가 생성 불필요 (max=5)
