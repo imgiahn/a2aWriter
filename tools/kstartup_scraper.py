@@ -24,7 +24,7 @@ KSTARTUP_API = (
 )
 
 TARGET_CLSFC        = {"사업화"}
-TARGET_REGIN_KW     = {"서울", "경기", "전국"}
+TARGET_REGIN_KW     = {"서울", "경기"}
 
 
 def _parse_date(s):
