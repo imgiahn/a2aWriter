@@ -6737,3 +6737,58 @@ LH 청약플러스 서울/경기 공고 수집 중...
 수집: 1건
   스킵 (중복): e편한세상 분당 퍼스트빌리지(성남낙생 A-1BL) 신혼희망타운(공공분양) 입주자모집공고
 새 공고 없음 (모두 기존 Task 존재)
+[main c5d2e0a] auto: 2026-06-19 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 30 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Planner Agent - startupgrantnote (K-Startup)
+==================================================
+기존 처리 공고: 20건 | 발행완료: 10개 | 대기중: 0개
+K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
+수집: 12건 (사업화 + 서울/경기/전국 필터)
+  상세 수집 중: 『2026년도 안양시 유망기업 방송영상 제작 지원사업』 모집공고...
+  Task 생성: [경기] 『2026년도 안양시 유망기업 방송영상 제작 지원사업』 모집공고 → 도약기창업자
+  스킵 (중복): 가죽·패션 제품개발 협업사업 모집 공고
+  상세 수집 중: 「2026 기술창업기업 마케팅 지원」 참여기업 모집...
+    PDF 첨부: (공고문)2026 기술창업기업 마케팅 지원 모집.pdf (3,311자)
+  Task 생성: [경기] 「2026 기술창업기업 마케팅 지원」 참여기업 모집 → 초기창업자
+  상세 수집 중: 청년성장지원 『이룸』하반기 청년창업팀 모집...
+  Task 생성: [경기] 청년성장지원 『이룸』하반기 청년창업팀 모집 → 예비창업자
+  상세 수집 중: 「2026 서울바이오허브-기술보증기금 글로벌 진출 성장 가속 프...
+    PDF 첨부: 2026 서울바이오허브-기술보증기금 글로벌진출 성장가속 프로그램 참여기업 (16,214자)
+  Task 생성: [서울] 「2026 서울바이오허브-기술보증기금 글로벌 진출 성장 가속 프로그램」  → 도약기창업자
+  상세 수집 중: 2026년 G-Bio Growth Lab 경기 바이오스타트업 기...
+  Task 생성: [경기] 2026년 G-Bio Growth Lab 경기 바이오스타트업 기술검증 사 → 도약기창업자
+  상세 수집 중: 2026년 서울시 지역상생 중장년 창업지원사업 <넥스트로컬 40...
+    PDF 첨부: 넥스트로컬 40+ 참여자 모집 사업공고문.pdf (5,541자)
+  Task 생성: [서울] 2026년 서울시 지역상생 중장년 창업지원사업 <넥스트로컬 40+> 참여 → 도약기창업자
+  상세 수집 중: 2026 경기도 ICT Product 시험인증 지원 2차공모...
+    PDF 첨부: [포스터]차세대융합기술연구원-2026 경기도 ICT Product 지원  (0자)
+  Task 생성: [경기] 2026 경기도 ICT Product 시험인증 지원 2차공모 → 도약기창업자
+  상세 수집 중: LH 창업카페 운영자 모집공고...
+  Task 생성: [경기] LH 창업카페 운영자 모집공고 → 도약기창업자
+  상세 수집 중: 바이오·메디컬 연구인프라 활용 지원사업...
+    PDF 첨부: 『바이오·메디컬 연구인프라 활용 지원사업』 수정 공고문.pdf (3,736자)
+  Task 생성: [경기] 바이오·메디컬 연구인프라 활용 지원사업 → 도약기창업자
+  상세 수집 중: 2026 강남구청 미래산업기반 지원사업...
+  Task 생성: [서울] 2026 강남구청 미래산업기반 지원사업 → 도약기창업자
+  상세 수집 중: [용인시산업진흥원] 용인 DeepTech STARTUP Batc...
+    PDF 첨부: (붙임2) 용인 DeepTech STARTUP Batch 2026 포스터 (1,275자)
+  Task 생성: [경기] [용인시산업진흥원] 용인 DeepTech STARTUP Batch 202 → 도약기창업자
+
+완료: 11개 Task 생성
