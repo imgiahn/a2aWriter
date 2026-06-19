@@ -7344,3 +7344,41 @@ K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
   스킵 (중복): 2026 경기도 ICT Product 시험인증 지원 2차공모
   스킵 (중복): 바이오·메디컬 연구인프라 활용 지원사업
 새 공고 없음 (모두 기존 Task 존재)
+[main 4d29dc8] auto: 2026-06-20 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 33 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+  [청약홈/APT분양/서울] 1p: 3건
+  [청약홈/APT분양/경기] 1p: 2건
+  [청약홈/APT분양/인천] 1p: 2건
+  [청약홈/오피스텔/도시형/서울] 1p: 5건
+  [청약홈/오피스텔/도시형/경기] 1p: 1건
+  [청약홈/APT잔여세대/서울] 1p: 3건
+  [청약홈/APT잔여세대/경기] 1p: 3건
+  [청약홈/APT잔여세대/인천] 1p: 2건
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Planner Agent — mbtireallove (반자동 모드)
+==================================================
+발행 완료: 90개 | 대기 중: 0개
+⏸  suggestions 없음. 새 시리즈 기획 필요
