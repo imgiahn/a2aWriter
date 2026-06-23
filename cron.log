@@ -9198,3 +9198,102 @@ K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
   스킵 (중복): 2026년 서울시 지역상생 중장년 창업지원사업 <넥스트로컬 40+> 참여
   스킵 (중복): 2026 경기도 ICT Product 시험인증 지원 2차공모
 새 공고 없음 (모두 기존 Task 존재)
+[main e2156af] auto: 2026-06-24 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 30 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+  [청약홈/APT분양/서울] 1p: 2건
+  [청약홈/APT분양/경기] 1p: 2건
+  [청약홈/APT분양/인천] 1p: 2건
+  [청약홈/오피스텔/도시형/서울] 1p: 2건
+  [청약홈/APT잔여세대/서울] 1p: 1건
+  [청약홈/APT잔여세대/경기] 1p: 5건
+  [청약홈/APT잔여세대/인천] 1p: 1건
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 8437자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 6981자
+==================================================
+Planner Agent — llmenginehistory (청약홈)
+==================================================
+기존 처리 공고: 56건
+청약홈 서울/경기/인천 공고 수집 중...
+수집: 15건
+  스킵 (중복): 장위 푸르지오 마크원
+  스킵 (중복): 드파인 아르티아
+  스킵 (중복): 이천 서희스타힐스 SKY(조합원 취소분)
+  상세+PDF 수집 중: [분양] 양주 회천지구 A-8BL 로제비앙 엘가...
+    📄 PDF 2026000278 양주 회천지구 A-8BL 로제비앙  (10000자)
+    🎯 배점기준 추출 완료
+  📋 Task 생성: [분양/general] 양주 회천지구 A-8BL 로제비앙 엘가
+  상세+PDF 수집 중: [분양] 더샵 검단레이크파크(AB23BL)...
+    📄 PDF 2026000195 더샵 검단레이크파크(AB23BL)  (10000자)
+    🎯 배점기준 추출 완료
+  📋 Task 생성: [분양/general] 더샵 검단레이크파크(AB23BL)
+  상세+PDF 수집 중: [분양] 더샵 검단레이크파크(AB22BL)...
+    📄 PDF 2026000194 더샵 검단레이크파크(AB22BL)  (10000자)
+    🎯 배점기준 추출 완료
+  📋 Task 생성: [분양/general] 더샵 검단레이크파크(AB22BL)
+  상세+PDF 수집 중: [분양] 잠실 테라412...
+    📄 PDF 2026950061 잠실 테라412 입주자모집광고문.p (10000자)
+  📋 Task 생성: [분양/general] 잠실 테라412
+  상세+PDF 수집 중: [분양] 대방역 여의도 더로드캐슬...
+    📄 PDF 2026950062 대방역 여의도 더로드캐슬 입주자모집 (10000자)
+  📋 Task 생성: [분양/general] 대방역 여의도 더로드캐슬
+  상세+PDF 수집 중: [분양] 청계백상앨리츠(2차)...
+    📄 PDF 2026940126 청계백상앨리츠(2차) 임의공급 입주 (10000자)
+  📋 Task 생성: [분양/general] 청계백상앨리츠(2차)
+  상세+PDF 수집 중: [분양] 고덕 자연앤 하우스디(A4BL)(민영)(4차)...
+    📄 PDF 2026940131 고덕 자연앤 하우스디(A4BL)(민 (10000자)
+  📋 Task 생성: [분양/general] 고덕 자연앤 하우스디(A4BL)(민영)(4차)
+  상세+PDF 수집 중: [분양] 식사 푸르지오 파크센트(조합원 취소분)...
+    📄 PDF 2026910160 식사 푸르지오 파크센트(조합원 취소 (10000자)
+  📋 Task 생성: [분양/general] 식사 푸르지오 파크센트(조합원 취소분)
+  상세+PDF 수집 중: [분양] 엘리프 역곡...
+    📄 PDF 2026910162 엘리프 역곡 무순위 입주자모집공고문 (10000자)
+  📋 Task 생성: [분양/general] 엘리프 역곡
+  상세+PDF 수집 중: [분양] 용인 푸르지오 클루센트(4차)...
+    📄 PDF 2026940127 용인 푸르지오 클루센트(4차) 임의 (8437자)
+  📋 Task 생성: [분양/general] 용인 푸르지오 클루센트(4차)
+  상세+PDF 수집 중: [분양] 옥정중앙역 대방 디에트르(중상1, 복합1BL) (2차)...
+    📄 PDF 2026940124 옥정중앙역 대방 디에트르(중상1,  (10000자)
+  📋 Task 생성: [분양/general] 옥정중앙역 대방 디에트르(중상1, 복합1BL) (2차)
+  상세+PDF 수집 중: [분양] 숭의역 라온프라이빗 스카이브...
+    📄 PDF 2026940132 숭의역 라온프라이빗 스카이브 임의공 (6981자)
+  📋 Task 생성: [분양/general] 숭의역 라온프라이빗 스카이브
+
+✅ 12개 Task 생성 완료
