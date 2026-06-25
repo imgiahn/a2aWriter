@@ -10386,3 +10386,56 @@ K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
   스킵 (중복): 2026년 서울시 지역상생 중장년 창업지원사업 <넥스트로컬 40+> 참여
 
 완료: 2개 Task 생성
+[main bac1e6f] auto: 2026-06-26 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 3 files changed, 359 insertions(+)
+ create mode 100644 blogs/startupgrantnote/tasks/planned/20260626_001.md
+ create mode 100644 blogs/startupgrantnote/tasks/planned/20260626_002.md
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+  [청약홈/APT분양/서울] 1p: 2건
+  [청약홈/APT분양/경기] 1p: 2건
+  [청약홈/오피스텔/도시형/서울] 1p: 3건
+  [청약홈/오피스텔/도시형/경기] 1p: 1건
+  [청약홈/APT잔여세대/경기] 1p: 5건
+  [청약홈/APT잔여세대/인천] 1p: 2건
+  📎 PDF 발견, 다운로드 중...
+    📄 PDF 10000자
+==================================================
+Planner Agent — llmenginehistory (청약홈)
+==================================================
+기존 처리 공고: 86건
+청약홈 서울/경기/인천 공고 수집 중...
+수집: 15건
+  스킵 (중복): 장위 푸르지오 마크원
+  스킵 (중복): 드파인 아르티아
+  스킵 (중복): 이천 서희스타힐스 SKY(조합원 취소분)
+  스킵 (중복): 양주 회천지구 A-8BL 로제비앙 엘가
+  스킵 (중복): 여의도 하이앤드63st
+  스킵 (중복): 잠실 테라412
+  스킵 (중복): 대방역 여의도 더로드캐슬
+  상세+PDF 수집 중: [임대] 의왕 백운밸리 리젠시빌 란트...
+    📄 PDF 2026850033 의왕 백운밸리 리젠시빌 란트 입주자 (10000자)
+  📋 Task 생성: [임대/general] 의왕 백운밸리 리젠시빌 란트
+  스킵 (중복): 수원이목지구 대방 디에트르 더 리체Ⅱ(A3BL) (17
+  스킵 (중복): 식사 푸르지오 파크센트(조합원 취소분)
+  스킵 (중복): 엘리프 역곡
+  스킵 (중복): 용인 푸르지오 클루센트(4차)
+  스킵 (중복): 옥정중앙역 대방 디에트르(중상1, 복합1BL) (2차)
+  스킵 (중복): 검암역자이르네
+  스킵 (중복): 숭의역 라온프라이빗 스카이브
+
+✅ 1개 Task 생성 완료
