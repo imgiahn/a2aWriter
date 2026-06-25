@@ -10354,3 +10354,35 @@ LH 청약플러스 서울/경기 공고 수집 중...
 수집: 1건
   스킵 (중복): e편한세상 분당 퍼스트빌리지(성남낙생 A-1BL) 신혼희망타운(공공분양) 입주자모집공고
 새 공고 없음 (모두 기존 Task 존재)
+[main d005d15] auto: 2026-06-26 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 27 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Planner Agent - startupgrantnote (K-Startup)
+==================================================
+기존 처리 공고: 44건 | 발행완료: 22개 | 대기중: 0개
+K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
+수집: 4건 (사업화 + 서울/경기/전국 필터)
+  상세 수집 중: 「미니테크노파크 운영사업」경기 남동부 지역특화산업 육성사업...
+  Task 생성: [경기] 「미니테크노파크 운영사업」경기 남동부 지역특화산업 육성사업 → 도약기창업자
+  상세 수집 중: 2026년 서울시 소셜벤처 IR 데모데이(도약단계) 참여기업 모...
+  Task 생성: [서울] 2026년 서울시 소셜벤처 IR 데모데이(도약단계) 참여기업 모집 → 도약기창업자
+  스킵 (중복): 2026년 경기도 기후테크 경진대회 참여기업 모집공고
+  스킵 (중복): 2026년 서울시 지역상생 중장년 창업지원사업 <넥스트로컬 40+> 참여
+
+완료: 2개 Task 생성
