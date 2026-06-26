@@ -10949,3 +10949,32 @@ Planner Agent — llmenginehistory (LH 청약 공고)
 기존 처리 공고: 88건
 LH 청약플러스 서울/경기 공고 수집 중...
 ⚠️  수집된 공고 없음
+[main bb5cc14] auto: 2026-06-27 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 25 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+==================================================
+Planner Agent - startupgrantnote (K-Startup)
+==================================================
+기존 처리 공고: 48건 | 발행완료: 24개 | 대기중: 0개
+K-Startup 사업화 공고 수집 중 (서울/경기/전국)...
+수집: 4건 (사업화 + 서울/경기/전국 필터)
+  스킵 (중복): 「미니테크노파크 운영사업」경기 남동부 지역특화산업 육성사업
+  스킵 (중복): 2026년 서울시 소셜벤처 IR 데모데이(도약단계) 참여기업 모집
+  스킵 (중복): 2026년 경기도 기후테크 경진대회 참여기업 모집공고
+  스킵 (중복): 2026년 서울시 지역상생 중장년 창업지원사업 <넥스트로컬 40+> 참여
+새 공고 없음 (모두 기존 Task 존재)
