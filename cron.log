@@ -11591,3 +11591,23 @@ Planner Agent — llmenginehistory (청약홈)
   스킵 (중복): 검암역자이르네
   스킵 (중복): 숭의역 라온프라이빗 스카이브
 새 공고 없음 (모두 기존 Task 존재)
+[main c42eb7b] auto: 2026-06-28 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 46 insertions(+)
+==================================================
+Planner Agent — mbtireallove (반자동 모드)
+==================================================
+발행 완료: 90개 | 대기 중: 0개
+⏸  suggestions 없음. 새 시리즈 기획 필요
