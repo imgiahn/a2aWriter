@@ -11472,3 +11472,45 @@ Writer Agent — mbtireallove
 Publisher Agent — mbtireallove
 ==================================================
 발행할 Task 없음 (blogs/mbtireallove/tasks/writing)
+[main 03c7c28] auto: 2026-06-27 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 26 insertions(+)
+From github.com:imgiahn/a2aWriter
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+  [분양] 12행 발견
+  📎 PDF 3건 발견, 다운로드 중...
+  📎 PDF 3건 발견, 다운로드 중...
+==================================================
+Planner Agent — llmenginehistory (LH 청약 공고)
+==================================================
+기존 처리 공고: 88건
+LH 청약플러스 서울/경기 공고 수집 중...
+수집: 3건
+  상세+PDF 수집 중: [분양] [정정공고]역곡지구 하우스토리(부천역곡 A-2블록) 신...
+    📄 PDF (정정)★역곡지구하우스토리(부천역곡A-2블록)입주자모집 (10000자)
+    📊 소득기준 표 추출 완료
+    🎯 배점기준 추출 완료
+    💾 PDF 저장: data/llmenginehistory/notices/0000061118/original.pdf
+  📋 Task 생성: [분양/sale] [정정공고]역곡지구 하우스토리(부천역곡 A-2블록) 신
+  상세+PDF 수집 중: [분양] 역곡지구 하우스토리(부천역곡 A-2블록) 신혼희망타운(...
+    📄 PDF ★역곡지구하우스토리(부천역곡A-2블록)입주자모집공고문_ (10000자)
+    📊 소득기준 표 추출 완료
+    🎯 배점기준 추출 완료
+    💾 PDF 저장: data/llmenginehistory/notices/0000061113/original.pdf
+  📋 Task 생성: [분양/sale] 역곡지구 하우스토리(부천역곡 A-2블록) 신혼희망타운(
+  스킵 (중복): e편한세상 분당 퍼스트빌리지(성남낙생 A-1BL) 신혼희망타운(공공분양) 입주자모집공고
+
+✅ 2개 Task 생성 완료
