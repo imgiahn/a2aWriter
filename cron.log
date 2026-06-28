@@ -11739,3 +11739,46 @@ Writer Agent — mbtireallove
 Publisher Agent — mbtireallove
 ==================================================
 발행할 Task 없음 (blogs/mbtireallove/tasks/writing)
+[main 86980ad] auto: 2026-06-28 발행기록
+ Committer: EC2 Default User <ec2-user@ip-172-31-17-173.eu-north-1.compute.internal>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 1 file changed, 29 insertions(+)
+==================================================
+Writer Agent — llmenginehistory
+==================================================
+Task: 20260628_002 — 역곡지구 하우스토리(부천역곡 A-2블록) 신혼희망타운(공공분양) 입주자모집공고 공고 해설
+  글 생성 중...
+  시세 조회 중... (국토교통부 실거래가)
+  안전마진 섹션 추가 완료
+  제목: 🏠 역곡지구 하우스토리 신혼희망타운 청약 신청 조건
+  초안 저장: articles/llmenginehistory/draft/20260628_002.html
+  Task 이동: planned/ → writing/
+
+✅ 완료: 20260628_002
+==================================================
+Publisher Agent — llmenginehistory
+==================================================
+Task: 20260628_002
+제목: 🏠 역곡지구 하우스토리 신혼희망타운 청약 신청 조건
+  로그인 필요 → 자동 로그인 시도...
+  ✅ 자동 로그인 성공
+  🎨 썸네일 생성 중...
+  🎨 썸네일 생성 완료 (gpt-image-2, 1,620,214 bytes)
+  🖼️  썸네일 업로드 완료
+  🗂️  카테고리 설정 완료 (id=1311445)
+  🖼️  대표이미지 업로드 완료
+  🔍 발행 후 URL: https://llmenginehistory.tistory.com/manage/posts/
+  🔍 발행 후 URL(재시도): https://llmenginehistory.tistory.com/manage/posts/
+✅ 발행 완료 → tasks/published/
+  📎 PDF 업로드 완료: ★역곡지구하우스토리(부천역곡A-2블록)입주자모집공고문_게시.pdf (1,070,717 bytes)
